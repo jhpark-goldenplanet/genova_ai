@@ -1,0 +1,72 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives (which insert the entries of the given .gitignore-style
+# file at that point).
+
+# Include .gitignore rules
+#!include:.gitignore
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env*.local
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+__mocks__/
+
+# Documentation
+README.md
+CHANGELOG.md
+docs/
+ARCHITECTURE.md
+DOMAIN_SETUP_GUIDE.md
+API_SPECIFICATION_original.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+*.log
+*.tgz
+*.gz
+.cache/
+tmp/
+temp/
+
+# Sample files (large or unnecessary for build)
+samples/
+
+# Claude related
+.claude/

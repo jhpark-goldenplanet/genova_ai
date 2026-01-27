@@ -1,0 +1,69 @@
+# 환경 변수 파일
+.env
+.env.*
+!.env.example
+backend/deployment/config/.env.production
+frontend/.env.local
+
+# 서비스 어카운트 키
+*.json
+!package.json
+!tsconfig.json
+!package-lock.json
+!yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# Node.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# 로그 파일
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS 파일
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.AppleDouble
+.LSOverride
+
+# IDE 설정
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+# 테스트 및 커버리지
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.nyc_output/
+
+# 기타
+.cache/
+temp/
+tmp/
+*.backup
+.git.backup
