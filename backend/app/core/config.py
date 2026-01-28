@@ -264,7 +264,6 @@ class VideoProcessingSettings(BaseModel):
 
     split_dir: str = Field(default="split_videos")
     subtitle_dir: str = Field(default="subtitles")
-    translator_model_id: str = Field(default="general/translation-llm")
     minimum_video_duration_sec: int = Field(default=60)
     gcp_base_output_dir: str = Field(default="uploaded_tmp")
     file_save_dir: str = Field(default="/tmp")
@@ -274,7 +273,6 @@ class VideoProcessingSettings(BaseModel):
         data = {
             "split_dir": os.getenv("SPLIT_DIR", "split_videos"),
             "subtitle_dir": os.getenv("SUBTITLE_DIR", "subtitles"),
-            "translator_model_id": os.getenv("TRANSLATOR_MODEL_ID", "general/translation-llm"),
             "minimum_video_duration_sec": int(os.getenv("MINIMUM_VIDEO_DURATION_SEC", "60")),
             "gcp_base_output_dir": os.getenv("GCP_BASE_OUTPUT_DIR", "uploaded_tmp"),
             "file_save_dir": os.getenv("FILE_SAVE_DIR", "/tmp"),

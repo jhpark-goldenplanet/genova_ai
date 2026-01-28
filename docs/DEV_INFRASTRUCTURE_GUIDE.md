@@ -46,7 +46,7 @@ Genova AI 프로젝트의 GCP 인프라 구성 및 네트워크 설정에 대한
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ Cloud Run: genova-ai-backend                             │  │
 │  │ - FastAPI                                                │  │
-│  │ - 2 vCPU, 4GB RAM                                        │  │
+│  │ - 4 vCPU, 8GB RAM                                        │  │
 │  │ - Min: 0, Max: 10 instances                              │  │
 │  └────┬───────────┬──────────┬──────────────────────────────┘  │
 └───────┼───────────┼──────────┼─────────────────────────────────┘
@@ -281,8 +281,8 @@ Region: asia-northeast3
 Image: asia-northeast3-docker.pkg.dev/genova-ai-project/genova-ai/backend:latest
 
 Resources:
-  CPU: 2 vCPU (2000m)
-  Memory: 4Gi
+  CPU: 4 vCPU (4000m)
+  Memory: 8Gi
   Timeout: 3600s
   CPU Boost: Enabled
 
@@ -310,8 +310,8 @@ Authentication:
 # - Cold Start: 5-15초
 
 # Backend: 동영상 처리, AI 호출
-# - 2 vCPU, 4GB RAM (동영상 인코딩)
-# - Cold Start: 10-30초
+# - 4 vCPU, 8GB RAM (동영상 인코딩 및 처리)
+# - Cold Start: 5-20초
 # - CPU Boost로 시작 시간 단축
 ```
 
@@ -328,9 +328,9 @@ Region: asia-northeast3
 Zone: asia-northeast3-a
 
 Machine Type:
-  Type: db-custom-2-7680
-  vCPUs: 2
-  Memory: 7.5GB
+  Type: db-f1-micro
+  vCPUs: Shared (0.6GB RAM)
+  Memory: 0.6GB
 
 Storage:
   Type: SSD
@@ -389,7 +389,12 @@ CORS:
 Provider: Upstash (External)
 Type: Redis 7
 Region: ap-northeast-1 (Tokyo)
-Plan: Pay as you go
+Plan: Free Tier
+
+Limits:
+  Max Commands: 10,000/day
+  Max Storage: 256MB
+  Max Concurrent Connections: 100
 
 Connection:
   Protocol: TLS (rediss://)
@@ -562,15 +567,15 @@ gcloud artifacts docker images list \
 
 | 서비스 | 예상 비용 | 설명 |
 |--------|-----------|------|
-| **Cloud Run (Backend)** | $30-50 | CPU 2, Memory 4Gi, 저사용량 |
+| **Cloud Run (Backend)** | $60-100 | CPU 4, Memory 8Gi, 저사용량 |
 | **Cloud Run (Frontend)** | $10-20 | CPU 1, Memory 1Gi, 저사용량 |
-| **Cloud SQL** | $60-80 | db-custom-2-7680, 상시 실행 |
+| **Cloud SQL** | $7-15 | db-f1-micro, 상시 실행 |
 | **Cloud Storage** | $5-10 | Standard, 50GB 가정 |
-| **Redis (Upstash)** | $10-20 | 종량제 |
+| **Redis (Upstash)** | $0 | Free Tier (10K commands/day) |
 | **Vertex AI** | $20-50 | Gemini API 호출량에 따라 |
 | **Secret Manager** | $1 | 5개 시크릿 |
 | **기타** | $10-20 | 네트워크, 로깅 등 |
-| **총 예상 비용** | **$146-251/월** | 사용량에 따라 변동 |
+| **총 예상 비용** | **$113-216/월** | 사용량에 따라 변동 |
 
 ### 비용 절감 전략
 
@@ -578,9 +583,9 @@ gcloud artifacts docker images list \
 # 1. Cloud Run Min Instances = 0
 # - Cold Start 허용으로 유휴 시간 비용 절감
 
-# 2. Cloud SQL 적정 사이즈
-# - Dev 환경은 작은 인스턴스 사용
-# - 필요시 즉시 스케일업 가능
+# 2. Cloud SQL 최소 사양 사용
+# - Dev 환경은 db-f1-micro (가장 저렴)
+# - 프로덕션 시 db-custom-2-7680 이상 권장
 
 # 3. GCS Lifecycle Policy
 # - temp/ 디렉토리 자동 삭제 (7일)
@@ -599,7 +604,7 @@ gcloud artifacts docker images list \
 # https://console.cloud.google.com/billing/
 
 # 예산 알림 설정
-# - 예산: $200/월
+# - 예산: $250/월
 # - 알림: 50%, 90%, 100%
 
 # 비용 분석

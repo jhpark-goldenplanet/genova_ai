@@ -35,8 +35,8 @@ steps:
           --platform=managed \
           --region=asia-northeast3 \
           --service-account=genova-backend-sa@$PROJECT_ID.iam.gserviceaccount.com \
-          --memory=4Gi \
-          --cpu=2 \
+          --memory=8Gi \
+          --cpu=4 \
           --timeout=3600 \
           --concurrency=10 \
           --min-instances=0 \
