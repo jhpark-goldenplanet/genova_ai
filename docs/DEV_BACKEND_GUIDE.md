@@ -37,7 +37,7 @@ Genova AI Backend의 Dev 환경 배포 및 운영 가이드입니다.
 │   Cloud Run     │
 │   (Backend)     │
 │  - FastAPI      │
-│  - Python 3.11  │
+│  - Python 3.12+ │
 └────────┬────────┘
          │
     ┌────┴────┐
@@ -110,7 +110,7 @@ cd backend
 ```yaml
 # cloudbuild.yaml 참조
 # Platform: linux/amd64
-# Base Image: python:3.11-slim
+# Base Image: python:3.12-slim
 # 빌드 위치: Artifact Registry
 # - asia-northeast3-docker.pkg.dev/genova-ai-project/genova-ai/backend:latest
 ```
@@ -128,8 +128,8 @@ asia-northeast3-docker.pkg.dev/genova-ai-project/genova-ai/backend:latest
 
 | 항목 | 값 | 설명 |
 |------|-----|------|
-| **Memory** | 4Gi | 동영상 처리에 필요한 메모리 |
-| **CPU** | 2 | 멀티코어 처리 |
+| **Memory** | 8Gi | 동영상 처리에 필요한 메모리 |
+| **CPU** | 4 | 멀티코어 처리 |
 | **Timeout** | 3600s (1시간) | 긴 작업 처리 |
 | **Concurrency** | 10 | 동시 요청 수 |
 | **Min Instances** | 0 | Cold start 허용 |
@@ -277,8 +277,8 @@ gcloud run services update genova-ai-backend \
 
 ```yaml
 Resources:
-  CPU: 2 cores (2000m)
-  Memory: 4Gi
+  CPU: 4 cores (4000m)
+  Memory: 8Gi
   Startup CPU Boost: enabled
 
 Execution:
@@ -308,7 +308,7 @@ Execution:
 | **연결 이름** | `genova-ai-project:asia-northeast3:genova-postgres` |
 | **버전** | PostgreSQL 15 |
 | **리전** | `asia-northeast3` |
-| **머신 타입** | db-custom-2-7680 (2 vCPU, 7.5GB RAM) |
+| **머신 타입** | db-f1-micro (Shared vCPU, 0.6GB RAM) |
 | **디스크** | SSD 10GB (자동 증가 활성화) |
 
 ### 데이터베이스 접속

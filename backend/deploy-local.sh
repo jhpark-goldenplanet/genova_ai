@@ -6,7 +6,7 @@
 # This script starts the FastAPI development server locally.
 #
 # Prerequisites:
-# - Python 3.11+ installed
+# - Python 3.12+ installed
 # - .env file with required environment variables
 # - Local PostgreSQL and Redis running (use ../setup-local-env.sh)
 #
