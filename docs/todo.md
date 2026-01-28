@@ -1120,7 +1120,6 @@ GCS_SIGNED_URL_EXPIRY=3600
 GENAI_API_KEY=your-genai-api-key
 VERTEX_AI_MODEL=gemini-3-flash-preview
 SUMMARIZATION_MODEL=gemini-3-flash-preview
-TRANSCRIBE_MODEL=gemini-2.0-pro-exp-02-05
 
 # API Security
 API_KEYS=your-api-key-here

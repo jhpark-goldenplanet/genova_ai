@@ -117,9 +117,18 @@ cd backend
 
 ## 📚 문서
 
+### 환경 설정
+- [로컬 개발 환경 설정](./docs/LOCAL_SETUP_GUIDE.md)
+
+### Dev 환경 인수인계
+- [Backend Dev 환경 가이드](./docs/DEV_BACKEND_GUIDE.md)
+- [Frontend Dev 환경 가이드](./docs/DEV_FRONTEND_GUIDE.md)
+- [GCP 인프라 및 네트워크 가이드](./docs/DEV_INFRASTRUCTURE_GUIDE.md)
+
+### 기타
 - [인수인계 체크리스트](./docs/todo.md)
-- [프론트엔드 가이드](./frontend/README.md)
-- [백엔드 가이드](./backend/README.md)
+- [프론트엔드 README](./frontend/README.md)
+- [백엔드 README](./backend/README.md)
 
 ---
 

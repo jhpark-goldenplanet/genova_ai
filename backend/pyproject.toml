@@ -1,0 +1,178 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+dev-dependencies = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",
+    "aiosqlite>=0.19.0",  # For testing with SQLite
+    
+    # Code quality
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.7.0",
+    
+    # Development tools
+    "pre-commit>=3.5.0",
+]
+
+[project]
+name = "genova-ai-backend"
+version = "1.0.0"
+description = "Video processing service with AI analysis for educational content"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    {name = "Genova AI Team"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # FastAPI and web framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    
+    # Database and ORM
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.12.0",
+    
+    # Redis for caching and state management
+    "redis[hiredis]>=5.0.0",
+    
+    # Google Cloud Platform services
+    "google-cloud-storage>=2.10.0",
+    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-speech>=2.21.0",
+    "google-cloud-translate>=3.12.0",
+    "vertexai>=1.38.0",
+    "google-genai>=1.59.0",
+    
+    # Video processing
+    "ffmpeg-python>=0.2.0",
+    "Pillow>=10.0.0",
+    "yt-dlp>=2025.10.22",  # YouTube video downloader (latest version for bot bypass)
+    
+    # Data validation and serialization
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    
+    # HTTP client for external requests
+    "httpx>=0.25.0",
+    "aiohttp>=3.9.0",
+    "aiofiles>=23.2.0",
+    
+    # File type detection
+    "python-magic>=0.4.27",
+    
+    # Logging and monitoring
+    "structlog>=23.2.0",
+    "python-json-logger>=2.0.7",
+    
+    # Environment and configuration
+    "python-dotenv>=1.0.0",
+    
+    # Async utilities
+    "asyncio-mqtt>=0.16.0",
+
+    # DNS resolution fix for VPC
+    "dnspython>=2.4.0",
+]
+
+
+
+[project.urls]
+Homepage = "https://github.com/genova-ai/backend"
+Repository = "https://github.com/genova-ai/backend.git"
+Issues = "https://github.com/genova-ai/backend/issues"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ffmpeg.*",
+    "magic.*",
+    "redis.*",
+    "google.*",
+    "vertexai.*",
+    "yt_dlp.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/venv/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
