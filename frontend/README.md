@@ -1,6 +1,6 @@
 # Genova AI Frontend
 
-Next.js 기반 농업 교육 동영상 분석 플랫폼 프론트엔드
+Next.js 기반  동영상 분석 플랫폼 프론트엔드
 
 ## 🚀 빠른 시작
 

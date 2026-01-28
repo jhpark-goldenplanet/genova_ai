@@ -1,10 +1,10 @@
 # Genova AI - AX AgriEdu Platform
 
-AI 기반 농업 교육 동영상 분석 플랫폼
+AI 기반  동영상 분석 플랫폼
 
 ## 📋 프로젝트 개요
 
-Genova AI는 농업 교육 동영상을 분석하여 자동으로 자막 생성, 요약, 구간 분할 등을 제공하는 플랫폼입니다.
+Genova AI는  동영상을 분석하여 자동으로 자막 생성, 요약, 구간 분할 등을 제공하는 플랫폼입니다.
 
 - **Frontend**: Next.js 14 + TypeScript
 - **Backend**: FastAPI + Python 3.11

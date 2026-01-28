@@ -1,6 +1,6 @@
 # Genova AI Backend
 
-FastAPI 기반 농업 교육 동영상 분석 플랫폼 백엔드
+FastAPI 기반  동영상 분석 플랫폼 백엔드
 
 ## 🚀 빠른 시작
 

@@ -1,5 +1,0 @@
-kind: compute#urlMap
-name: genova-http-redirect
-defaultUrlRedirect:
-  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
-  httpsRedirect: true
