@@ -82,11 +82,13 @@ Genova AI 프로젝트의 GCP 인프라 구성 및 네트워크 설정에 대한
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                      AI Services                                │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐        │
-│  │ Vertex AI   │  │ Speech-to-   │  │ Translation    │        │
-│  │ (Gemini)    │  │ Text API     │  │ API            │        │
-│  │ us-central1 │  │ Global       │  │ Global         │        │
-│  └─────────────┘  └──────────────┘  └────────────────┘        │
+│  ┌─────────────────────────────┐  ┌────────────────┐           │
+│  │ Vertex AI (Gemini)          │  │ Translation    │           │
+│  │ - Video Analysis            │  │ API            │           │
+│  │ - Summarization             │  │ Global         │           │
+│  │ - Transcript Generation     │  │                │           │
+│  │ us-central1                 │  │                │           │
+│  └─────────────────────────────┘  └────────────────┘           │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -153,9 +155,8 @@ gcloud services list --enabled --project=genova-ai-project
 # - sqladmin.googleapis.com (Cloud SQL Admin)
 # - storage-api.googleapis.com (Cloud Storage)
 # - secretmanager.googleapis.com (Secret Manager)
-# - aiplatform.googleapis.com (Vertex AI)
-# - speech.googleapis.com (Speech-to-Text)
-# - translate.googleapis.com (Translation)
+# - aiplatform.googleapis.com (Vertex AI - Gemini)
+# - translate.googleapis.com (Translation API)
 # - artifactregistry.googleapis.com (Artifact Registry)
 ```
 
@@ -170,7 +171,6 @@ gcloud services enable \
   storage-api.googleapis.com \
   secretmanager.googleapis.com \
   aiplatform.googleapis.com \
-  speech.googleapis.com \
   translate.googleapis.com \
   artifactregistry.googleapis.com \
   --project=genova-ai-project

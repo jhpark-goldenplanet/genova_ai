@@ -63,9 +63,8 @@ Genova AI Backend의 Dev 환경 배포 및 운영 가이드입니다.
 - **Cache**: Redis 7 (Upstash)
 - **Storage**: Google Cloud Storage
 - **AI Services**:
-  - Vertex AI (Gemini)
-  - Speech-to-Text API
-  - Translation API
+  - Vertex AI (Gemini) - 비디오 분석, 요약, Transcript 생성
+  - Translation API - 다국어 번역
 
 ---
 

@@ -100,9 +100,8 @@ cd backend
 - **Cache**: Redis 7
 - **ORM**: SQLAlchemy (Async)
 - **AI Services**:
-  - Google Vertex AI (Gemini)
-  - Google Cloud Translation
-  - Google Cloud Speech-to-Text
+  - Google Vertex AI (Gemini) - 비디오 분석, 요약, Transcript 생성
+  - Google Cloud Translation - 다국어 번역
 
 ### Infrastructure
 - **Cloud Platform**: Google Cloud Platform
