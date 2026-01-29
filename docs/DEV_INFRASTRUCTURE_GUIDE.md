@@ -189,6 +189,10 @@ Custom Domains:
   - agriedu.genaion.net
   - genova.genaion.net
 
+Domain Registrar: 가비아 (Gabia)
+  # 도메인 관리는 가비아 웹사이트에서 수행
+  # DNS 레코드 설정: A 레코드 → 136.110.153.12
+
 SSL Certificate:
   Name: genova-ssl-cert
   Type: Google Managed
