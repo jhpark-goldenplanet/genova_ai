@@ -30,12 +30,33 @@ Genova AI 프로젝트의 GCP 인프라 구성 및 네트워크 설정에 대한
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
+│                    Custom Domains                                │
+│           agriedu.genaion.net / genova.genaion.net               │
+│                   (Google Managed SSL)                           │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  Cloud Load Balancer                             │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ Static IP: 136.110.153.12                              │     │
+│  │ - HTTPS Forwarding Rule → HTTPS Proxy                  │     │
+│  │ - HTTP Forwarding Rule → HTTP Redirect (→ HTTPS)       │     │
+│  │ - URL Map: genova-url-map                              │     │
+│  │ - Backend Service: be-genova-frontend                  │     │
+│  └────────────────────┬───────────────────────────────────┘     │
+└───────────────────────┼──────────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────────────────┐
 │                     Frontend Layer                               │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │ Cloud Run: genova-frontend                                │   │
 │  │ - Next.js 14                                              │   │
 │  │ - 1 vCPU, 1GB RAM                                         │   │
 │  │ - Min: 0, Max: 10 instances                               │   │
+│  │ - Ingress: Internal + Load Balancer only                 │   │
+│  │ - Network Endpoint Group: neg-genova-frontend            │   │
 │  └────────────────────┬─────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                         │
@@ -48,6 +69,7 @@ Genova AI 프로젝트의 GCP 인프라 구성 및 네트워크 설정에 대한
 │  │ - FastAPI                                                │  │
 │  │ - 4 vCPU, 8GB RAM                                        │  │
 │  │ - Min: 0, Max: 10 instances                              │  │
+│  │ - Ingress: All (Public)                                  │  │
 │  └────┬───────────┬──────────┬──────────────────────────────┘  │
 └───────┼───────────┼──────────┼─────────────────────────────────┘
         │           │          │
@@ -158,6 +180,55 @@ gcloud services enable \
 
 ## 3. 🌐 네트워크 아키텍처
 
+### Custom Domain 및 Load Balancer
+
+**적용된 설정:**
+
+```yaml
+Custom Domains:
+  - agriedu.genaion.net
+  - genova.genaion.net
+
+SSL Certificate:
+  Name: genova-ssl-cert
+  Type: Google Managed
+  Status: ACTIVE
+  Domains:
+    - agriedu.genaion.net (ACTIVE)
+    - genova.genaion.net (ACTIVE)
+  Expiry: 2026-04-05
+
+Static IP:
+  Address: 136.110.153.12
+  Name: genova-frontend-ip
+
+Cloud Load Balancer:
+  - URL Map: genova-url-map
+    Default Service: be-genova-frontend
+
+  - HTTPS Proxy: genova-https-proxy
+    SSL Certificate: genova-ssl-cert
+    URL Map: genova-url-map
+
+  - HTTP Redirect: genova-http-redirect
+    HTTP → HTTPS 자동 리다이렉트
+
+Forwarding Rules:
+  - genova-https-forwarding-rule (TCP:443)
+  - genova-http-forwarding-rule (TCP:80)
+
+Backend Service:
+  Name: be-genova-frontend
+  Protocol: HTTP
+  Backend: neg-genova-frontend (Serverless NEG)
+
+Network Endpoint Group:
+  Name: neg-genova-frontend
+  Type: SERVERLESS
+  Location: asia-northeast3
+  Service: genova-frontend (Cloud Run)
+```
+
 ### VPC 구성
 
 현재 기본 VPC 네트워크 사용:
@@ -175,22 +246,40 @@ SUBNET=default (auto mode)
 
 ```bash
 # 기본 방화벽 규칙 사용
-# Cloud Run은 자동으로 HTTPS(443) 포트 노출
+# - default-allow-icmp
+# - default-allow-internal
+# - default-allow-rdp
+# - default-allow-ssh
 
-# 방화벽 규칙 확인
-gcloud compute firewall-rules list --project=genova-ai-project
+# Load Balancer는 자동으로 HTTPS(443), HTTP(80) 포트 노출
 ```
 
 ### 네트워크 흐름
 
-#### Frontend → Backend
+#### 사용자 → Frontend (Custom Domain)
 
 ```
 User Browser
-    ↓ HTTPS (443)
+    ↓ HTTPS (443) / HTTP (80)
+agriedu.genaion.net (136.110.153.12)
+    ↓
+Cloud Load Balancer
+  - HTTP → HTTPS 리다이렉트
+  - SSL Termination (Google Managed SSL)
+    ↓
+Backend Service (be-genova-frontend)
+    ↓
+Serverless NEG (neg-genova-frontend)
+    ↓
+Cloud Run: genova-frontend
+```
+
+#### Frontend → Backend
+
+```
 genova-frontend.run.app
     ↓ HTTPS (443)
-genova-ai-backend.run.app
+genova-ai-backend.run.app (Public 접근 가능)
     ↓
 Cloud SQL / GCS / Redis
 ```
@@ -202,6 +291,8 @@ Backend에서 Frontend origin 허용:
 ```python
 # backend/app/main.py
 origins = [
+    "https://agriedu.genaion.net",  # Custom Domain (Primary)
+    "https://genova.genaion.net",   # Custom Domain (Alternative)
     "https://genova-frontend-987680405347.asia-northeast3.run.app",
     "http://localhost:3000",  # 로컬 개발
 ]
@@ -220,6 +311,11 @@ GCS CORS 설정:
 ```bash
 # backend/cors.json
 gsutil cors set cors.json gs://genova-ai-project-genova-videos
+
+# CORS 허용 도메인:
+# - https://agriedu.genaion.net
+# - https://genova.genaion.net
+# - https://genova-frontend-987680405347.asia-northeast3.run.app
 ```
 
 ### 외부 연결
@@ -266,8 +362,21 @@ Scaling:
   Max Concurrency: 80
 
 Network:
-  Ingress: All
+  Ingress: Internal and Cloud Load Balancing
+    (Load Balancer를 통해서만 접근 가능)
   Egress: All
+
+Load Balancer Integration:
+  Backend Service: be-genova-frontend
+  Network Endpoint Group: neg-genova-frontend
+  Custom Domains:
+    - agriedu.genaion.net
+    - genova.genaion.net
+
+URLs:
+  - https://agriedu.genaion.net (Primary)
+  - https://genova.genaion.net (Primary)
+  - https://genova-frontend-6frp4obakq-du.a.run.app (Direct, Internal only)
 
 Authentication:
   Allow unauthenticated: Yes
@@ -743,27 +852,57 @@ Infrastructure as Code (IaC) 도입 권장:
 - Terraform: GCP 리소스 코드화
 - Pulumi: Python으로 인프라 관리
 
-### 인프라 개선 권장사항
+### 현재 인프라 상태
 
-1. **Custom Domain 설정**
-   - Cloud Run 커스텀 도메인 매핑
-   - Cloud Load Balancer + SSL 인증서
+#### ✅ 적용된 설정
 
-2. **VPC Peering**
+1. **Custom Domain 및 SSL**
+   - ✅ 커스텀 도메인: agriedu.genaion.net, genova.genaion.net
+   - ✅ Google Managed SSL 인증서
+   - ✅ Cloud Load Balancer 구성
+   - ✅ HTTP → HTTPS 자동 리다이렉트
+   - ✅ Static IP: 136.110.153.12
+
+2. **Load Balancer**
+   - ✅ Backend Service + Serverless NEG
+   - ✅ URL Map 및 HTTPS Proxy
+   - ✅ Frontend Ingress 제한 (Internal + LB only)
+
+3. **기본 인프라**
+   - ✅ Cloud Run (Frontend/Backend)
+   - ✅ Cloud SQL (PostgreSQL 15)
+   - ✅ Cloud Storage (Regional)
+   - ✅ Secret Manager
+   - ✅ Artifact Registry
+   - ✅ Cloud Build CI/CD
+
+#### ⚠️ 권장 개선사항 (미적용)
+
+1. **VPC Peering**
    - Cloud SQL Private IP 활성화
    - Cloud Run VPC Connector 사용
+   - 장점: 보안 강화, Private 네트워크 통신
 
-3. **High Availability**
-   - Cloud SQL 다중 리전 복제
+2. **High Availability**
+   - Cloud SQL 다중 리전 복제 (HA 설정)
    - Cloud Storage 다중 리전 버킷
+   - 장점: 장애 복구, 가용성 향상
 
-4. **CDN**
+3. **Cloud CDN**
    - Cloud CDN 활성화 (정적 리소스)
-   - 글로벌 사용자 지원
+   - 글로벌 엣지 캐싱
+   - 장점: 글로벌 사용자 성능 개선, 트래픽 비용 절감
 
-5. **Monitoring & Alerting**
+4. **Monitoring & Alerting**
    - Uptime checks 설정
    - SLO/SLI 정의 및 모니터링
+   - 알림 정책 (이메일/SMS)
+   - 장점: 장애 조기 감지, 서비스 품질 관리
+
+5. **Infrastructure as Code (IaC)**
+   - Terraform 또는 Pulumi 도입
+   - 인프라 버전 관리
+   - 장점: 재현 가능한 배포, 변경 이력 관리
 
 ### 연락처
 
