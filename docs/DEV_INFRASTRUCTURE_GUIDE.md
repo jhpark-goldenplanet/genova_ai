@@ -231,6 +231,23 @@ Network Endpoint Group:
   Type: SERVERLESS
   Location: asia-northeast3
   Service: genova-frontend (Cloud Run)
+
+Cloud Armor Security Policy:
+  Name: block-suspicious-ips
+  Description: Block suspicious IPs for Cloud Run
+  Attached to: be-genova-frontend (Backend Service)
+
+  Rules:
+    - Priority 100: Geo-blocking
+      Action: deny(403)
+      Description: Block non-Korea traffic
+      Condition: origin.region_code != 'KR'
+      # 한국 이외 지역에서 오는 트래픽 차단
+
+    - Priority 2147483647: Default allow
+      Action: allow
+      Description: Default rule
+      Condition: All remaining traffic
 ```
 
 ### VPC 구성
@@ -867,10 +884,11 @@ Infrastructure as Code (IaC) 도입 권장:
    - ✅ HTTP → HTTPS 자동 리다이렉트
    - ✅ Static IP: 136.110.153.12
 
-2. **Load Balancer**
+2. **Load Balancer 및 보안**
    - ✅ Backend Service + Serverless NEG
    - ✅ URL Map 및 HTTPS Proxy
    - ✅ Frontend Ingress 제한 (Internal + LB only)
+   - ✅ Cloud Armor (Geo-blocking: 한국 외 지역 차단)
 
 3. **기본 인프라**
    - ✅ Cloud Run (Frontend/Backend)
