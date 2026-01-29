@@ -58,7 +58,6 @@ dependencies = [
     # Google Cloud Platform services
     "google-cloud-storage>=2.10.0",
     "google-cloud-aiplatform>=1.38.0",
-    "google-cloud-speech>=2.21.0",
     "google-cloud-translate>=3.12.0",
     "vertexai>=1.38.0",
     "google-genai>=1.59.0",

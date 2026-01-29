@@ -5,7 +5,7 @@ Google AI services configuration and client management.
 import os
 from typing import Optional
 
-from google.cloud import aiplatform, speech, translate_v2 as translate
+from google.cloud import aiplatform, translate_v2 as translate
 from google.oauth2 import service_account
 from google import genai
 import vertexai
@@ -25,11 +25,7 @@ class AIConfig:
 
         # Genai API configuration
         self.genai_api_key = os.getenv("GENAI_API_KEY")
-        
-        # Speech-to-Text configuration
-        self.speech_language_codes = ["ko-KR", "en-US"]  # Korean and English
-        self.speech_sample_rate = int(os.getenv("SPEECH_SAMPLE_RATE", "16000"))
-        
+
         # Translation configuration
         self.default_target_language = os.getenv("DEFAULT_TARGET_LANGUAGE", "en")
         
@@ -58,7 +54,6 @@ class AIClientManager:
         self.config = AIConfig()
         self._vertex_initialized = False
         self._genai_client: Optional[genai.Client] = None
-        self._speech_client: Optional[speech.SpeechClient] = None
         self._translate_client: Optional[translate.Client] = None
 
     def init_vertex_ai(self) -> None:
@@ -77,16 +72,6 @@ class AIClientManager:
         if self._genai_client is None:
             self._genai_client = genai.Client(api_key=self.config.genai_api_key)
         return self._genai_client
-
-    def get_speech_client(self) -> speech.SpeechClient:
-        """Get Speech-to-Text client."""
-        if self._speech_client is None:
-            credentials = self.config.get_credentials()
-            if credentials:
-                self._speech_client = speech.SpeechClient(credentials=credentials)
-            else:
-                self._speech_client = speech.SpeechClient()
-        return self._speech_client
 
     def get_translate_client(self) -> translate.Client:
         """Get Translation API client."""

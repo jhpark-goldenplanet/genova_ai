@@ -1261,9 +1261,9 @@ class BackgroundTaskManager:
             )
 
     async def _transcription_step(self, video_id: UUID, local_video_path: str) -> None:
-        """Perform speech-to-text transcription."""
+        """Store transcription from AI analysis step."""
         await video_status_service.update_processing_step(video_id, "TRANSCRIBE", 80)
-        
+
         try:
             # Check if transcription was already done in AI analysis step
             ai_metadata = await video_status_service.get_processing_metadata(video_id)
@@ -1271,7 +1271,7 @@ class BackgroundTaskManager:
             if ai_metadata and "ai_analysis" in ai_metadata:
                 ai_results = ai_metadata["ai_analysis"]
                 if ai_results.get("transcription") or ai_results.get("transcript"):
-                    logger.info(f"✓ Transcription already completed in AI orchestrator, reusing results for video {video_id}")
+                    logger.info(f"✓ Transcription already completed in AI orchestrator, storing results for video {video_id}")
 
                     # Ensure transcription is stored in database
                     from app.core.database import db_manager
@@ -1282,40 +1282,20 @@ class BackgroundTaskManager:
 
                     return
 
-            # Fallback: If transcription not found in AI results, perform it now
-            logger.warning(f"⚠ Transcription not found in AI orchestrator results, performing standalone transcription for video {video_id}")
+            # If transcription not found, raise error
+            logger.error(f"❌ Transcription not found in AI orchestrator results for video {video_id}")
+            raise VideoProcessingException(
+                ErrorCodes.PROCESSING_FAILED,
+                "AI analysis did not provide transcription. Video processing cannot continue."
+            )
 
-            # Get video information from database
-            from app.core.database import db_manager
-            async with db_manager.get_session_context() as session:
-                video_service = VideoService(session)
-
-                try:
-                    # Perform transcription using Speech-to-Text service
-                    from app.services.speech_to_text_service import speech_to_text_service
-                    transcription_result = await speech_to_text_service.transcribe_video(
-                        local_video_path
-                    )
-
-                    # Store transcription results
-                    await video_service.update_video_transcription(video_id, transcription_result)
-
-                    # Store processing metadata in Redis
-                    await video_status_service.store_processing_metadata(
-                        video_id, {"transcription": transcription_result}
-                    )
-
-                    logger.info(f"Fallback transcription completed for video {video_id}")
-
-                finally:
-                    # The temporary file is no longer cleaned up here, but in the main processing function
-                    pass
-                        
+        except VideoProcessingException:
+            raise
         except Exception as e:
-            logger.error(f"Transcription failed for video {video_id}: {str(e)}")
-            # Store error but continue processing
-            await video_status_service.store_processing_metadata(
-                video_id, {"transcription_error": {"error": str(e)}}
+            logger.error(f"Transcription step failed for video {video_id}: {str(e)}")
+            raise VideoProcessingException(
+                ErrorCodes.PROCESSING_FAILED,
+                f"Transcription step failed: {str(e)}"
             )
 
     async def _segmentation_step(self, video_id: UUID, local_video_path: str) -> None:
