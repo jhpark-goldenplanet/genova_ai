@@ -99,16 +99,18 @@ cd frontend
 
 ```yaml
 # cloudbuild.yaml 참조
-# Build Args:
-# - NEXT_PUBLIC_API_URL: Backend API URL
-# - NEXT_PUBLIC_API_KEY: Backend API 인증 키 (Secret Manager)
+# Build Args (substitutions):
+# - NEXT_PUBLIC_API_URL: Backend API URL (기본값)
+# - NEXT_PUBLIC_API_KEY: Backend API 인증 키 (substitutions)
 # - NEXT_PUBLIC_FIREBASE_*: Firebase 설정 (공개 정보)
 
 # 이미지 위치: GCR (Container Registry)
 # - gcr.io/genova-ai-project/genova-frontend:latest
 ```
 
-**중요**: Next.js의 환경 변수는 빌드 타임에 주입되므로, 환경 변수 변경 시 반드시 재빌드가 필요합니다.
+**중요**:
+- Next.js의 환경 변수는 빌드 타임에 주입되므로, 환경 변수 변경 시 반드시 재빌드가 필요합니다.
+- API Key는 cloudbuild.yaml의 `substitutions`로 관리됩니다 (클라이언트 번들에 포함되어 공개됨)
 
 #### 2. Container Registry 푸시
 
@@ -119,10 +121,10 @@ gcr.io/genova-ai-project/genova-frontend:latest
 
 #### 3. Cloud Run 배포
 
-수동 배포가 필요합니다. (cloudbuild.yaml에 배포 단계 미포함)
+cloudbuild.yaml Step #2에서 자동으로 Cloud Run에 배포됩니다.
 
 ```bash
-# 이미지 빌드 후 수동 배포
+# Step #2에서 자동 실행되는 명령
 gcloud run deploy genova-frontend \
   --image=gcr.io/genova-ai-project/genova-frontend:latest \
   --platform=managed \
@@ -135,6 +137,8 @@ gcloud run deploy genova-frontend \
   --min-instances=0 \
   --max-instances=10
 ```
+
+**참고**: Backend와 동일하게 이미지 빌드 → 푸시 → 배포가 한 번에 자동화되어 있습니다.
 
 ### 리소스 설정
 
@@ -186,13 +190,18 @@ open https://genova-frontend-987680405347.asia-northeast3.run.app
 
 ## 3. 🔐 환경 변수 및 Secret 관리
 
-### Secret Manager 목록
+### 환경 변수 관리
 
-Frontend는 다음 Secret을 사용합니다:
+Frontend는 다음 방식으로 환경 변수를 관리합니다:
 
-| Secret 이름 | 용도 | 사용 위치 |
-|-------------|------|-----------|
-| `dev-next-public-api-key` | Backend API 인증 키 | 빌드 타임 |
+| 변수 이름 | 관리 방식 | 용도 |
+|-----------|----------|------|
+| `NEXT_PUBLIC_API_KEY` | cloudbuild.yaml substitutions | Backend API 인증 키 |
+| `NEXT_PUBLIC_FIREBASE_*` | cloudbuild.yaml substitutions | Firebase 설정 (공개 정보) |
+
+**참고**:
+- Frontend의 `NEXT_PUBLIC_*` 변수는 클라이언트 번들에 포함되어 브라우저에 노출됩니다.
+- Secret Manager 대신 `substitutions`를 사용하는 이유는 어차피 공개되는 정보이기 때문입니다.
 
 ### Secret 확인 및 수정
 
@@ -495,7 +504,7 @@ console.log(process.env.NEXT_PUBLIC_API_URL)
 
 ```bash
 # CORS 에러
-# - Backend의 CORS_ORIGINS 확인
+# - Backend의 CORS_ORIGINS가 https://genova.genaion.net으로 설정되어 있는지 확인
 # - Backend에 Frontend URL 추가
 
 # API 키 오류
@@ -512,7 +521,7 @@ console.log(process.env.NEXT_PUBLIC_API_URL)
 ```bash
 # Firebase Console에서 확인:
 # 1. Authentication > Settings > Authorized domains
-#    - genova-frontend-987680405347.asia-northeast3.run.app 추가 확인
+#    - genova.genaion.net 추가 확인
 
 # 2. Firebase API Key 확인
 gcloud secrets versions access latest --secret=dev-next-public-api-key

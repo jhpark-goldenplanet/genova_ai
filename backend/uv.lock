@@ -593,7 +593,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "ffmpeg-python" },
     { name = "google-cloud-aiplatform" },
-    { name = "google-cloud-speech" },
     { name = "google-cloud-storage" },
     { name = "google-cloud-translate" },
     { name = "google-genai" },
@@ -638,7 +637,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.104.0" },
     { name = "ffmpeg-python", specifier = ">=0.2.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.38.0" },
-    { name = "google-cloud-speech", specifier = ">=2.21.0" },
     { name = "google-cloud-storage", specifier = ">=2.10.0" },
     { name = "google-cloud-translate", specifier = ">=3.12.0" },
     { name = "google-genai", specifier = ">=1.59.0" },
@@ -781,21 +779,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6e/ca/a4648f5038cb94af4b3942815942a03aa9398f9fb0bef55b3f1585b9940d/google_cloud_resource_manager-1.14.2.tar.gz", hash = "sha256:962e2d904c550d7bac48372607904ff7bb3277e3bb4a36d80cc9a37e28e6eb74", size = 446370, upload-time = "2025-03-17T11:35:56.343Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b1/ea/a92631c358da377af34d3a9682c97af83185c2d66363d5939ab4a1169a7f/google_cloud_resource_manager-1.14.2-py3-none-any.whl", hash = "sha256:d0fa954dedd1d2b8e13feae9099c01b8aac515b648e612834f9942d2795a9900", size = 394344, upload-time = "2025-03-17T11:35:54.722Z" },
-]
-
-[[package]]
-name = "google-cloud-speech"
-version = "2.33.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-core", extra = ["grpc"] },
-    { name = "google-auth" },
-    { name = "proto-plus" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/74/9c5a556f8af19cab461058aa15e1409e7afa453ca2383473a24a12801ef7/google_cloud_speech-2.33.0.tar.gz", hash = "sha256:fd08511b5124fdaa768d71a4054e84a5d8eb02531cb6f84f311c0387ea1314ed", size = 389072, upload-time = "2025-06-11T23:56:37.231Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/1d/880342b2541b4bad888ad8ab2ac77d4b5dad25b32a2a1c5f21140c14c8e3/google_cloud_speech-2.33.0-py3-none-any.whl", hash = "sha256:4ba16c8517c24a6abcde877289b0f40b719090504bf06b1adea248198ccd50a5", size = 335681, upload-time = "2025-06-11T23:56:36.026Z" },
 ]
 
 [[package]]

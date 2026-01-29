@@ -228,7 +228,7 @@ VERTEX_AI_MODEL=gemini-3-flash-preview
 SUMMARIZATION_MODEL=gemini-3-flash-preview
 
 # CORS
-CORS_ORIGINS=https://genova-frontend-987680405347.asia-northeast3.run.app
+CORS_ORIGINS=https://genova.genaion.net
 ```
 
 ### 환경 변수 업데이트
@@ -487,7 +487,7 @@ GCS CORS 설정은 환경에 따라 다르게 적용합니다:
 ```json
 [
   {
-    "origin": ["https://genova-frontend-987680405347.asia-northeast3.run.app"],
+    "origin": ["https://genova.genaion.net"],
     "method": ["GET", "HEAD", "PUT", "POST"],
     "responseHeader": ["Content-Type", "Content-Length", "Content-Disposition"],
     "maxAgeSeconds": 3600

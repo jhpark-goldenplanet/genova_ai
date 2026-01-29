@@ -6,7 +6,7 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_API_URL=https://genova-ai-backend-987680405347.asia-northeast3.run.app'
       - '--build-arg'
-      - 'NEXT_PUBLIC_API_KEY=$$NEXT_PUBLIC_API_KEY'
+      - 'NEXT_PUBLIC_API_KEY=${_NEXT_PUBLIC_API_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}'
       - '--build-arg'
@@ -22,8 +22,6 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/genova-frontend:latest'
       - '.'
-    secretEnv:
-      - NEXT_PUBLIC_API_KEY
 
   # 이미지를 GCR에 푸시
   - name: 'gcr.io/cloud-builders/docker'
@@ -31,22 +29,35 @@ steps:
       - 'push'
       - 'gcr.io/$PROJECT_ID/genova-frontend:latest'
 
+  # Cloud Run 배포
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - 'gcloud'
+      - 'run'
+      - 'deploy'
+      - 'genova-frontend'
+      - '--image=gcr.io/$PROJECT_ID/genova-frontend:latest'
+      - '--platform=managed'
+      - '--region=asia-northeast3'
+      - '--allow-unauthenticated'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--timeout=300'
+      - '--concurrency=80'
+      - '--min-instances=0'
+      - '--max-instances=10'
+
 images:
   - 'gcr.io/$PROJECT_ID/genova-frontend:latest'
 
-# Firebase 설정 (공개 정보이므로 하드코딩)
+# 환경 변수 (빌드 시 치환됨)
 substitutions:
+  _NEXT_PUBLIC_API_KEY: 'nn1ezEkJImlE+/kj1vCqvhSS+6i41+caXIXat1Y7AMo='
   _NEXT_PUBLIC_FIREBASE_API_KEY: 'AIzaSyA2HOaStGSfquR7e1NlPp7LglLtqvTQXCs'
   _NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'genova-ai-project.firebaseapp.com'
   _NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'genova-ai-project'
   _NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: 'genova-ai-project.firebasestorage.app'
   _NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '987680405347'
   _NEXT_PUBLIC_FIREBASE_APP_ID: '1:987680405347:web:de155bc342c02608c50556'
-
-# Secret Manager에서 가져오는 민감한 정보
-availableSecrets:
-  secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/dev-next-public-api-key/versions/latest
-      env: NEXT_PUBLIC_API_KEY
 
 timeout: 1200s

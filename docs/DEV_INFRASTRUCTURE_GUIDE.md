@@ -313,8 +313,7 @@ Backend에서 Frontend origin 허용:
 # backend/app/main.py
 origins = [
     "https://agriedu.genaion.net",  # Custom Domain (Primary)
-    "https://genova.genaion.net",   # Custom Domain (Alternative)
-    "https://genova-frontend-987680405347.asia-northeast3.run.app",
+    "https://genova.genaion.net",   # Custom Domain (Primary)
     "http://localhost:3000",  # 로컬 개발
 ]
 
@@ -508,7 +507,7 @@ Encryption:
 
 CORS:
   Allowed Origins:
-    - https://genova-frontend-987680405347.asia-northeast3.run.app
+    - https://genova.genaion.net
   Allowed Methods: GET, HEAD, PUT, POST
   Max Age: 3600s
 ```
@@ -583,11 +582,12 @@ gcloud projects add-iam-policy-binding genova-ai-project \
 gcloud secrets list --project=genova-ai-project
 
 # Secrets:
-# 1. dev-db-password
-# 2. dev-gemini-api-key
-# 3. dev-api-keys
-# 4. dev-redis-url
-# 5. dev-next-public-api-key
+# 1. dev-database-url (Backend DATABASE_URL)
+# 2. dev-db-password (Legacy, 호환성 유지)
+# 3. dev-gemini-api-key (Vertex AI API Key)
+# 4. dev-api-keys (Backend API Keys)
+# 5. dev-redis-url (Redis Connection URL)
+# 6. dev-next-public-api-key (Frontend API Key)
 
 # Secret 권한 확인
 gcloud secrets get-iam-policy dev-db-password

@@ -19,60 +19,44 @@ steps:
 
   # Cloud Run 배포
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: bash
     args:
-      - '-c'
-      - |
-        # DATABASE_URL 구성
-        DB_USER="genova_user"
-        DB_NAME="genova_ai"
-        SQL_CONNECTION_NAME="genova-ai-project:asia-northeast3:genova-postgres"
-        DATABASE_URL="postgresql+asyncpg://$${DB_USER}:$$DB_PASSWORD@/$${DB_NAME}?host=/cloudsql/$${SQL_CONNECTION_NAME}"
-
-        # Cloud Run 배포
-        gcloud run deploy genova-ai-backend \
-          --image=asia-northeast3-docker.pkg.dev/$PROJECT_ID/genova-ai/backend:latest \
-          --platform=managed \
-          --region=asia-northeast3 \
-          --service-account=genova-backend-sa@$PROJECT_ID.iam.gserviceaccount.com \
-          --memory=8Gi \
-          --cpu=4 \
-          --timeout=3600 \
-          --concurrency=10 \
-          --min-instances=0 \
-          --max-instances=10 \
-          --allow-unauthenticated \
-          --add-cloudsql-instances=$${SQL_CONNECTION_NAME} \
-          --cpu-boost \
-          --update-secrets=DB_PASSWORD=dev-db-password:latest \
-          --update-secrets=GENAI_API_KEY=dev-gemini-api-key:latest \
-          --update-secrets=API_KEYS=dev-api-keys:latest \
-          --update-secrets=REDIS_URL=dev-redis-url:latest \
-          --set-env-vars="APP_ENV=production" \
-          --set-env-vars="LOG_LEVEL=INFO" \
-          --set-env-vars="DATABASE_URL=$${DATABASE_URL}" \
-          --set-env-vars="DATABASE_POOL_SIZE=5" \
-          --set-env-vars="DATABASE_MAX_OVERFLOW=10" \
-          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
-          --set-env-vars="GOOGLE_CLOUD_LOCATION=asia-northeast3" \
-          --set-env-vars="GOOGLE_CLOUD_LOCATION_VERTEX_AI=us-central1" \
-          --set-env-vars="GCS_BUCKET_NAME=genova-ai-project-genova-videos" \
-          --set-env-vars="MAX_FILE_SIZE=2147483648" \
-          --set-env-vars="PROCESSING_TIMEOUT=900" \
-          --set-env-vars="MAX_CONCURRENT_TASKS=5" \
-          --set-env-vars="VERTEX_AI_MODEL=gemini-3-flash-preview" \
-          --set-env-vars="SUMMARIZATION_MODEL=gemini-3-flash-preview" \
-          --set-env-vars="CORS_ORIGINS=https://genova-frontend-987680405347.asia-northeast3.run.app"
-    secretEnv:
-      - DB_PASSWORD
+      - 'gcloud'
+      - 'run'
+      - 'deploy'
+      - 'genova-ai-backend'
+      - '--image=asia-northeast3-docker.pkg.dev/$PROJECT_ID/genova-ai/backend:latest'
+      - '--platform=managed'
+      - '--region=asia-northeast3'
+      - '--service-account=genova-backend-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--memory=8Gi'
+      - '--cpu=4'
+      - '--timeout=3600'
+      - '--concurrency=10'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--allow-unauthenticated'
+      - '--add-cloudsql-instances=genova-ai-project:asia-northeast3:genova-postgres'
+      - '--cpu-boost'
+      - '--update-secrets=DATABASE_URL=dev-database-url:latest'
+      - '--update-secrets=GENAI_API_KEY=dev-gemini-api-key:latest'
+      - '--update-secrets=API_KEYS=dev-api-keys:latest'
+      - '--update-secrets=REDIS_URL=dev-redis-url:latest'
+      - '--set-env-vars=APP_ENV=production'
+      - '--set-env-vars=LOG_LEVEL=INFO'
+      - '--set-env-vars=DATABASE_POOL_SIZE=5'
+      - '--set-env-vars=DATABASE_MAX_OVERFLOW=10'
+      - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
+      - '--set-env-vars=GOOGLE_CLOUD_LOCATION=asia-northeast3'
+      - '--set-env-vars=GOOGLE_CLOUD_LOCATION_VERTEX_AI=us-central1'
+      - '--set-env-vars=GCS_BUCKET_NAME=genova-ai-project-genova-videos'
+      - '--set-env-vars=MAX_FILE_SIZE=2147483648'
+      - '--set-env-vars=PROCESSING_TIMEOUT=900'
+      - '--set-env-vars=MAX_CONCURRENT_TASKS=5'
+      - '--set-env-vars=VERTEX_AI_MODEL=gemini-3-flash-preview'
+      - '--set-env-vars=SUMMARIZATION_MODEL=gemini-3-flash-preview'
+      - '--set-env-vars=CORS_ORIGINS=https://genova.genaion.net'
 
 images:
   - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/genova-ai/backend:latest'
-
-# Secret Manager에서 가져오는 민감한 정보
-availableSecrets:
-  secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/dev-db-password/versions/latest
-      env: DB_PASSWORD
 
 timeout: 1800s
