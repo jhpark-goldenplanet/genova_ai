@@ -867,12 +867,6 @@ RPO (Recovery Point Objective): 24시간 (Daily Backup)
 - [Monitoring](https://console.cloud.google.com/monitoring?project=genova-ai-project)
 - [Logs Explorer](https://console.cloud.google.com/logs?project=genova-ai-project)
 
-### 네트워크 다이어그램 도구
-
-Infrastructure as Code (IaC) 도입 권장:
-- Terraform: GCP 리소스 코드화
-- Pulumi: Python으로 인프라 관리
-
 ### 현재 인프라 상태
 
 #### ✅ 적용된 설정
@@ -898,35 +892,9 @@ Infrastructure as Code (IaC) 도입 권장:
    - ✅ Artifact Registry
    - ✅ Cloud Build CI/CD
 
-#### ⚠️ 권장 개선사항 (미적용)
+---
 
-1. **VPC Peering**
-   - Cloud SQL Private IP 활성화
-   - Cloud Run VPC Connector 사용
-   - 장점: 보안 강화, Private 네트워크 통신
-
-2. **High Availability**
-   - Cloud SQL 다중 리전 복제 (HA 설정)
-   - Cloud Storage 다중 리전 버킷
-   - 장점: 장애 복구, 가용성 향상
-
-3. **Cloud CDN**
-   - Cloud CDN 활성화 (정적 리소스)
-   - 글로벌 엣지 캐싱
-   - 장점: 글로벌 사용자 성능 개선, 트래픽 비용 절감
-
-4. **Monitoring & Alerting**
-   - Uptime checks 설정
-   - SLO/SLI 정의 및 모니터링
-   - 알림 정책 (이메일/SMS)
-   - 장점: 장애 조기 감지, 서비스 품질 관리
-
-5. **Infrastructure as Code (IaC)**
-   - Terraform 또는 Pulumi 도입
-   - 인프라 버전 관리
-   - 장점: 재현 가능한 배포, 변경 이력 관리
-
-### 연락처
+## 연락처
 
 - **Project**: Genova AI - AX AgriEdu Platform
 - **Organization**: ax-axmvp
