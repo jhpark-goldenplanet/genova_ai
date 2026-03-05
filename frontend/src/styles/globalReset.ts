@@ -126,6 +126,8 @@ const globalStyles = css`
 		margin: 0;
 		padding: 0;
 		word-break: keep-all;
+		user-select: none;
+		-webkit-user-select: none;
 		/* color: #111; */
 		-webkit-tap-highlight-color: rgba(255, 255, 255, 0);
 	}

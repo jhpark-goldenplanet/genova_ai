@@ -1,12 +1,12 @@
 'use client';
 
 import * as S from './styled';
-import dynamic from 'next/dynamic';
 import ico_download from '@images/ico_download.png';
 import ico_reset from '@images/ico_reset.png';
 import Image from 'next/image';
 import TimeRangePicker from '@/components/TimeRangePicker';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { isUndefined } from 'lodash-es';
 import {
 	convertTimeToSeconds,
@@ -14,6 +14,7 @@ import {
 	fileToBase64,
 	getPinImage,
 	validateTimeRanges,
+	unit,
 } from '@/shared/utils/base';
 // import { splitDownload } from '@/shared/apis/video';
 import useGetVideoInfo from '@/shared/hooks/useGetVideoInfo';
@@ -26,30 +27,36 @@ import { useModal } from '@/shared/hooks';
 import AddThumbnailModal from './components/AddThumbnailModal';
 import VideoPlayer from '@/components/VideoPlayer';
 import { useLanguageStore } from '@/shared/store/language';
-import { errorToast, successToast } from '@/shared/utils/toastUtils';
+import { errorToast, successToast, warningToast } from '@/shared/utils/toastUtils';
+import { LoaderOnly } from '@/components/LoaderOnly';
+import Skeleton from 'react-loading-skeleton';
+import AnimatedSelect from '@/components/AnimatedSelect';
 
 const CLASS_NAMES = ['chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5'];
 
 export default function Split() {
 	const { custom, closeFreeModal } = useModal();
 	const { language, dispatchLanguage } = useLanguageStore((state) => state);
+	const router = useRouter();
 
 	// 첫 로딩 시에는 language 없이 요청 (원본), 이후 언어 변경 시 해당 언어로 요청
 	// 페이지 이동 시 저장된 언어가 있으면 해당 언어로 시작
 	const [requestLanguage, setRequestLanguage] = useState<string | undefined>(
 		language !== 'ko' ? (language as any) : undefined
 	);
-	const { isLoaded, isError, videoInfo, videoId, originLanguage } = useGetVideoInfo(requestLanguage as any);
+	const { isLoaded, isError, videoInfo, videoId, originLanguage, status } = useGetVideoInfo(requestLanguage as any);
 
 	const [timestamp, setTimestamp] = useState<ISegmentsSchema[]>();
 	const [isBusy, setIsBusy] = useState(false);
 	const [currentVideoId, setCurrentVideoId] = useState<string>();
+	const isNavigatingToSummaryRef = useRef(false);
 
 	const videoRef = useRef<any>(null);
 	const initialTimeStamps = useRef<ISegmentsSchema[]>();
 	const videoDuration = useRef(0);
 
 	const isReady = isLoaded && !isError && !isUndefined(videoInfo);
+	const isConverting = status === 'PENDING' || status === 'IN_PROGRESS';
 
 	const queryClient = useQueryClient();
 
@@ -83,6 +90,21 @@ export default function Split() {
 			initialTimeStamps.current = undefined; // initialTimeStamps 초기화
 		}
 	}, [videoId, currentVideoId]);
+
+	useEffect(() => {
+		if (!videoId || !isConverting) {
+			isNavigatingToSummaryRef.current = false;
+			return;
+		}
+
+		if (isNavigatingToSummaryRef.current) {
+			return;
+		}
+
+		warningToast('영상 분석이 진행 중입니다. 요약 정리 화면에서 결과를 확인해주세요.');
+		isNavigatingToSummaryRef.current = true;
+		router.replace(`/video/${videoId}/summary`);
+	}, [isConverting, videoId, router]);
 
 	useEffect(() => {
 		if (videoInfo?.segments) {
@@ -237,11 +259,105 @@ export default function Split() {
 	//
 	//
 
-	if (!isReady) return null;
+	if (!isReady) {
+		return (
+			<S.Main>
+				<S.PageTopBar>
+					<S.PageDescription>구간별 분할 범위를 조정하고 결과 영상을 다운로드할 수 있습니다.</S.PageDescription>
+					<S.PageTopActions>
+						<AnimatedSelect
+							value={language}
+							onChange={(nextValue) => dispatchLanguage(nextValue)}
+							options={[
+								{ value: 'ko', label: '한국어' },
+								{ value: 'en', label: 'English' },
+								{ value: 'ja', label: '日本語' },
+								{ value: 'zh', label: '中文' },
+								{ value: 'vi', label: 'Tiếng Việt' },
+							]}
+						/>
+					</S.PageTopActions>
+				</S.PageTopBar>
+
+				<S.VideoWrapper>
+					<Skeleton width="100%" height={unit(300)} />
+				</S.VideoWrapper>
+
+				<S.TimeStampContainer>
+					<h1>영상 분할</h1>
+
+					<ul>
+						{[...Array(3)].map((_, index) => {
+							return (
+								<li key={index} style={{ opacity: 0.65 }}>
+									<Skeleton width={unit(180)} />
+									<span>~</span>
+									<Skeleton width={unit(180)} />
+									<Skeleton width={unit(360)} />
+								</li>
+							);
+						})}
+
+						{[...Array(3)].map((_, index) => {
+							return (
+								<Fragment key={`placeholder-line-${index}`}>
+									<S.TimelineLine index={index} total={3} />
+									<S.TimeLinePin src={getPinImage(index)} index={index} total={3} alt="ico_reset" width={9} height={12} />
+								</Fragment>
+							);
+						})}
+					</ul>
+				</S.TimeStampContainer>
+
+				<S.ButtonContainer>
+					<button className="download-button" type="button" disabled>
+						<Image src={ico_download} alt="ico_download" width={18.5} height={18.5} />
+						<span>다운로드</span>
+					</button>
+					<button className="reset-button" type="button" disabled>
+						<Image src={ico_reset} alt="ico_reset" width={18.5} height={18.5} />
+						<span>초기화</span>
+					</button>
+					<div
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: unit(6),
+							color: 'rgba(96, 107, 138, 1)',
+							fontWeight: 600,
+							fontSize: unit(14),
+						}}
+					>
+						<LoaderOnly />
+						{isConverting ? '영상 분석 중입니다...' : '영상 데이터를 불러오는 중입니다...'}
+					</div>
+				</S.ButtonContainer>
+
+				<Loader isFetching={isConverting} isLoading={isConverting} withSidebar />
+			</S.Main>
+		);
+	}
 	// console.log('videoInfo', videoInfo);
 
 	return (
-		<main>
+		<S.Main>
+			<S.PageTopBar>
+				<S.PageDescription>구간별 분할 범위를 조정하고 결과 영상을 다운로드할 수 있습니다.</S.PageDescription>
+				<S.PageTopActions>
+					<AnimatedSelect
+						value={language}
+						onChange={(nextValue) => dispatchLanguage(nextValue)}
+						options={[
+							{ value: 'ko', label: '한국어' },
+							{ value: 'en', label: 'English' },
+							{ value: 'ja', label: '日本語' },
+							{ value: 'zh', label: '中文' },
+							{ value: 'vi', label: 'Tiếng Việt' },
+						]}
+					/>
+				</S.PageTopActions>
+			</S.PageTopBar>
+
 			<S.VideoWrapper>
 				<VideoPlayer
 					key={videoInfo.gcs_view_link}
@@ -321,7 +437,7 @@ export default function Split() {
 				</>
 			)}
 
-			<Loader isFetching={isBusy} isLoading={isBusy} />
-		</main>
+			<Loader isFetching={isBusy} isLoading={isBusy} withSidebar />
+		</S.Main>
 	);
 }

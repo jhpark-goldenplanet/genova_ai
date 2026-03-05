@@ -5,7 +5,11 @@ import styled from '@emotion/styled';
 import { useAuth } from '@/context/AuthContext';
 import { unit } from '@/shared/utils/base';
 
-export default function GoogleSignIn() {
+interface GoogleSignInProps {
+	fullHeight?: number;
+}
+
+export default function GoogleSignIn({ fullHeight = 40 }: GoogleSignInProps) {
 	const { signInWithGoogle } = useAuth();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -24,7 +28,7 @@ export default function GoogleSignIn() {
 
 	return (
 		<Container>
-			<GoogleButton onClick={handleSignIn} disabled={loading}>
+			<GoogleButton $height={fullHeight} onClick={handleSignIn} disabled={loading}>
 				<GoogleIcon />
 				<span>{loading ? '로그인 중...' : 'Google로 계속하기'}</span>
 			</GoogleButton>
@@ -36,19 +40,22 @@ export default function GoogleSignIn() {
 const Container = styled.div`
 	display: flex;
 	flex-direction: column;
-	align-items: center;
+	align-items: stretch;
 	gap: ${unit(12)};
+	width: 100%;
 `;
 
-const GoogleButton = styled.button`
+const GoogleButton = styled.button<{ $height: number }>`
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: ${unit(12)};
-	padding: ${unit(12)} ${unit(24)};
+	width: 100%;
+	height: ${({ $height }) => `${unit($height)}`};
+	box-sizing: border-box;
+	border-radius: ${unit(4)};
 	background: white;
 	border: 1px solid #dadce0;
-	border-radius: ${unit(4)};
 	cursor: pointer;
 	font-size: ${unit(14)};
 	font-weight: 500;

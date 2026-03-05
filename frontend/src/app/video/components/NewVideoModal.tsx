@@ -204,18 +204,20 @@ export default function NewVideoModal({ setIsBusy, onClose }: Props) {
 			(async () => {
 				try {
 					const file = files[0];
+					const contentType = (file.type || 'video/mp4').split(';')[0].trim().toLowerCase();
 
 					// Step 1: Signed URL 요청
 					console.log('[Step 1] Requesting upload URL...');
 					const { upload_url, video_id } = await getUploadUrl({
 						filename: file.name,
-						content_type: file.type,
+						content_type: contentType,
 						file_size: file.size,
 					});
 
 					// Step 2: GCS에 직접 업로드
 					console.log('[Step 2] Uploading to GCS...', { video_id });
-					await uploadToGCS(upload_url, file);
+					const normalizedContentType = contentType;
+					await uploadToGCS(upload_url, file, normalizedContentType);
 
 					// Step 3: 업로드 완료 확인
 					console.log('[Step 3] Confirming upload...', { video_id });

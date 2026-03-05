@@ -1,16 +1,65 @@
 import { getColor, unit } from '@/shared/utils/base';
 import styled from '@emotion/styled';
 import Image from 'next/image';
+import { keyframes } from '@emotion/react';
+
+const pageFadeIn = keyframes`
+	from {
+		opacity: 0;
+		transform: translateY(${unit(14)});
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+`;
+
+export const Main = styled.main`
+	animation: ${pageFadeIn} 0.35s ease;
+`;
+
+export const PageTopBar = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: ${unit(12)};
+	margin-bottom: ${unit(10)};
+`;
+
+export const PageDescription = styled.p`
+	font-size: ${unit(15)};
+	font-weight: 500;
+	line-height: ${unit(20)};
+	color: rgba(96, 107, 138, 1);
+`;
+
+export const PageTopActions = styled.div`
+	display: flex;
+	align-items: center;
+	gap: ${unit(8)};
+`;
+
+export const PageSelect = styled.select`
+	width: ${unit(96)};
+	height: ${unit(36)};
+	border-radius: ${unit(8)};
+	border: 1px solid rgba(201, 211, 225, 1);
+	background: white;
+	color: rgba(31, 42, 68, 1);
+	font-size: ${unit(13)};
+	font-weight: 600;
+	padding: 0 ${unit(10)};
+`;
 
 export const VideoWrapper = styled.section`
+	width: 100%;
+	aspect-ratio: 16 / 9;
 	background-color: rgba(247, 247, 249, 1);
 	border: 1.5px solid rgba(222, 229, 237, 1);
-
 	min-height: ${unit(300)};
-
-	padding: 0 ${unit(190)};
-
 	border-radius: ${unit(8)};
+	overflow: hidden;
 	margin-bottom: ${unit(10)};
 `;
 
@@ -120,6 +169,7 @@ export const ButtonContainer = styled.section`
 		letter-spacing: ${unit(-0.3)};
 
 		border: 1.5px solid rgba(26, 43, 89, 1);
+		transition: box-shadow 0.3s ease, background-color 0.3s ease, color 0.3s ease;
 
 		img {
 			width: ${unit(20)};
@@ -129,10 +179,28 @@ export const ButtonContainer = styled.section`
 		&.download-button {
 			background-color: rgba(26, 43, 89, 1);
 			color: white;
+
+			&:hover {
+				background: rgba(35, 57, 110, 1);
+				box-shadow: 0 6px 12px rgba(26, 43, 89, 0.24);
+			}
+
+			&:active {
+				box-shadow: 0 3px 8px rgba(26, 43, 89, 0.22);
+			}
 		}
 		&.reset-button {
 			background-color: white;
 			color: rgba(26, 43, 89, 1);
+
+			&:hover {
+				background: rgba(246, 248, 252, 1);
+				box-shadow: 0 4px 9px rgba(113, 126, 157, 0.2);
+			}
+
+			&:active {
+				box-shadow: 0 2px 6px rgba(113, 126, 157, 0.18);
+			}
 		}
 	}
 `;
@@ -226,16 +294,35 @@ export const LinkInsertButtonWrapper = styled.div`
 		letter-spacing: -0.4%;
 
 		cursor: pointer;
+		transition: box-shadow 0.3s ease, background-color 0.3s ease, color 0.3s ease;
 
 		&:nth-of-type(1) {
 			background: white;
 			color: rgba(114, 115, 126, 1);
 			border: 1px solid rgba(185, 194, 205, 1);
+
+			&:hover {
+				background: rgba(246, 248, 252, 1);
+				box-shadow: 0 4px 9px rgba(113, 126, 157, 0.2);
+			}
+
+			&:active {
+				box-shadow: 0 2px 6px rgba(113, 126, 157, 0.18);
+			}
 		}
 
 		&:nth-of-type(2) {
 			background: rgba(26, 43, 89, 1);
 			color: white;
+
+			&:hover {
+				background: rgba(35, 57, 110, 1);
+				box-shadow: 0 6px 12px rgba(26, 43, 89, 0.24);
+			}
+
+			&:active {
+				box-shadow: 0 3px 8px rgba(26, 43, 89, 0.22);
+			}
 		}
 	}
 `;

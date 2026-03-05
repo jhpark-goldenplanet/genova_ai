@@ -403,6 +403,8 @@ class VideoService:
             VideoProcessingException: If validation or creation fails
         """
         try:
+            normalized_content_type = (content_type or "video/mp4").split(";")[0].strip().lower()
+
             # Validate file size (2GB limit)
             MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
             if file_size > MAX_FILE_SIZE:
@@ -422,10 +424,10 @@ class VideoService:
                 "video/webm",
                 "video/x-matroska",
             ]
-            if content_type not in ALLOWED_VIDEO_TYPES:
+            if normalized_content_type not in ALLOWED_VIDEO_TYPES:
                 raise VideoProcessingException(
                     ErrorCodes.INVALID_FILE_TYPE,
-                    f"Invalid video type: {content_type}. Allowed types: {', '.join(ALLOWED_VIDEO_TYPES)}",
+                    f"Invalid video type: {normalized_content_type}. Allowed types: {', '.join(ALLOWED_VIDEO_TYPES)}",
                     status_code=400,
                 )
 
@@ -442,7 +444,7 @@ class VideoService:
                 description=description,
                 source_type="FILE_UPLOAD",
                 original_filename=original_filename,
-                mime_type=content_type,
+                mime_type=normalized_content_type,
             )
 
             video = await self.video_repository.create(
@@ -462,7 +464,7 @@ class VideoService:
             upload_url, gcs_path = gcs_service.generate_upload_signed_url(
                 video_id=video.id,
                 filename=original_filename,
-                content_type=content_type,
+                content_type=normalized_content_type,
                 expiration_hours=2,
             )
 

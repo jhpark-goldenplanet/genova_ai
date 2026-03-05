@@ -4,11 +4,12 @@ import Image from 'next/image';
 import * as S from './styled';
 import ico_download from '@images/ico_download.png';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ISegmentsSchema } from '@/typings/schema';
 import { useModal } from '@/shared/hooks';
 import { isUndefined } from 'lodash-es';
 import { convertTimeToSeconds, downloadAsCSV, downloadAsXLSX, generateIncrements, unit } from '@/shared/utils/base';
-import { successToast } from '@/shared/utils/toastUtils';
+import { successToast, warningToast } from '@/shared/utils/toastUtils';
 import useGetVideoInfoForScript from '@/shared/hooks/useGetVideoInfoForScript';
 import Skeleton from 'react-loading-skeleton';
 import { LoaderOnly } from '@/components/LoaderOnly';
@@ -32,8 +33,12 @@ export default function Script() {
 		videoInfo: videoInfoForScript,
 		originLanguage,
 		videoId,
+		status,
 	} = useGetVideoInfoForScript(requestLanguage as any);
 	const isReadyForScript = isLoadedForScript && !isErrorForScript && !isUndefined(videoInfoForScript);
+	const isConverting = status === 'PENDING' || status === 'IN_PROGRESS';
+	const isConvertingRef = useRef(false);
+	const router = useRouter();
 
 	const [timestamp, setTimestamp] = useState<ISegmentsSchema[]>();
 	const [currentVideoId, setCurrentVideoId] = useState<string>();
@@ -99,6 +104,20 @@ export default function Script() {
 	}, [videoId, currentVideoId]);
 
 	useEffect(() => {
+		if (!videoId || !isConverting) {
+			isConvertingRef.current = false;
+			return;
+		}
+
+		if (!isConvertingRef.current) {
+			warningToast('영상 분석이 진행 중입니다. 요약 정리 화면에서 결과를 확인해주세요.');
+			isConvertingRef.current = true;
+		}
+
+		router.replace(`/video/${videoId}/summary`);
+	}, [isConverting, videoId, router]);
+
+	useEffect(() => {
 		if (!isReadyForScript) return;
 
 		console.log('[Script] videoInfo 업데이트:', {
@@ -134,10 +153,9 @@ export default function Script() {
 
 	return (
 		<S.Main>
-			<S.TotalTimelineSummaryWrapper>
-				<div className="header-section">
-					<h1>타임라인 별 스크립트</h1>
-
+			<S.PageTopBar>
+				<S.PageDescription>타임라인별 스크립트를 확인하고 파일로 다운로드할 수 있습니다.</S.PageDescription>
+				<S.PageTopActions>
 					{isReadyForScript && !isUndefined(timestamp) && (
 						<S.DownloadButton
 							onClick={() => {
@@ -151,6 +169,12 @@ export default function Script() {
 							<span>다운로드</span>
 						</S.DownloadButton>
 					)}
+				</S.PageTopActions>
+			</S.PageTopBar>
+
+			<S.TotalTimelineSummaryWrapper>
+				<div className="header-section">
+					<h1>타임라인 별 스크립트</h1>
 				</div>
 
 				{isReadyForScript && !isUndefined(timestamp) ? (
@@ -180,20 +204,6 @@ export default function Script() {
 					</>
 				)}
 			</S.TotalTimelineSummaryWrapper>
-
-			{isReadyForScript && !isUndefined(timestamp) && (
-				<S.DownloadButton
-					onClick={() => {
-						confirm({
-							message: '스크립트를 다운로드 하시겠습니까?',
-							okHandler: downloadScript,
-						});
-					}}
-				>
-					<Image src={ico_download} alt="ico_download" width={21} height={21} />
-					<span>다운로드</span>
-				</S.DownloadButton>
-			)}
 		</S.Main>
 	);
 }

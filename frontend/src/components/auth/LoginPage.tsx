@@ -1,13 +1,51 @@
 'use client';
 
 import Image from 'next/image';
+import { useState } from 'react';
 import logo_icon from '@images/logo_icon.png';
 import GoogleSignIn from './GoogleSignIn';
+import { useAuth } from '@/context/AuthContext';
 import * as S from '@/app/(root)/styled';
 import styled from '@emotion/styled';
 import { unit } from '@/shared/utils/base';
+import { SubmitHandler, useForm } from 'react-hook-form';
+import Textfield from '@/components/Input/Text';
+
+interface LoginFormValues {
+	id: string;
+	password: string;
+}
 
 export default function LoginPage() {
+	const { signInWithIdPassword } = useAuth();
+	const { register, handleSubmit, watch, formState } = useForm<LoginFormValues>({
+		defaultValues: {
+			id: '',
+			password: '',
+		},
+		mode: 'onChange',
+	});
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState('');
+	const watchId = watch('id');
+	const watchPassword = watch('password');
+
+	const handleLogin: SubmitHandler<LoginFormValues> = async ({ id, password }) => {
+		try {
+			setLoading(true);
+			setError('');
+			await signInWithIdPassword(id, password);
+		} catch (err: any) {
+			setError(err.message || '로그인에 실패했습니다.');
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const onLoginClick = () => {
+		handleSubmit(handleLogin)();
+	};
+
 	return (
 		<S.Container>
 			<S.Header>
@@ -19,8 +57,48 @@ export default function LoginPage() {
 
 			<S.Main>
 				<Title>Genova AI에 오신 것을 환영합니다</Title>
-				<Subtitle>goldenplanet.co.kr 계정으로 로그인해주세요</Subtitle>
-				<GoogleSignIn />
+
+				<Form>
+					<Textfield
+						name="id"
+						placeholder="아이디(또는 이메일)"
+						register={register}
+						options={{ required: '아이디를 입력해주세요.' }}
+						disabled={loading}
+						inputStyle={{
+							background: 'rgba(255, 255, 255, 0.1)',
+							color: '#ffffff',
+						}}
+						error={!!formState.errors.id}
+						errors={formState.errors}
+					/>
+					<Textfield
+						name="password"
+						placeholder="비밀번호"
+						disabled={loading}
+						type="password"
+						register={register}
+						options={{ required: '비밀번호를 입력해주세요.' }}
+						inputStyle={{
+							background: 'rgba(255, 255, 255, 0.1)',
+							color: '#ffffff',
+						}}
+						error={!!formState.errors.password}
+						errors={formState.errors}
+						onKeyDown={(e) => {
+							if (e.key === 'Enter') {
+								onLoginClick();
+							}
+						}}
+					/>
+					<ButtonRow>
+						<LoginButton type="button" onClick={onLoginClick} disabled={loading || !watchId || !watchPassword}>
+							{loading ? '로그인 중...' : '로그인'}
+						</LoginButton>
+						<GoogleSignIn fullHeight={40} />
+					</ButtonRow>
+				</Form>
+				{error && <ErrorMessage>{error}</ErrorMessage>}
 			</S.Main>
 
 			<S.Footer>
@@ -67,11 +145,11 @@ export default function LoginPage() {
 				</S.TermsRow>
 			</S.Footer>
 		</S.Container>
-	);
+);
 }
 
 const Title = styled.h1`
-	font-size: ${unit(36)};
+	font-size: ${unit(48)};
 	font-weight: 700;
 	background: linear-gradient(90deg, #4b89d4 0%, #57d7ee 54.5%, #68acff 74%, #a0c3ff 100%);
 	-webkit-background-clip: text;
@@ -80,7 +158,7 @@ const Title = styled.h1`
 	color: transparent;
 	text-align: center;
 	margin: 0;
-	margin-bottom: ${unit(16)};
+	margin-bottom: ${unit(60)};
 `;
 
 const Subtitle = styled.p`
@@ -89,4 +167,66 @@ const Subtitle = styled.p`
 	text-align: center;
 	margin: 0;
 	margin-bottom: ${unit(24)};
+`;
+
+const Form = styled.div`
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: ${unit(14)};
+	width: min(92vw, 360px);
+
+	input {
+		padding: ${unit(12)} ${unit(14)};
+		border: 1px solid rgba(255, 255, 255, 0.45) !important;
+		border-radius: ${unit(6)};
+		transition: all 0.2s;
+	}
+
+	input::placeholder {
+		color: rgba(255, 255, 255, 0.8);
+	}
+
+	input:focus {
+		border-color: #8ac3ff !important;
+		outline: none;
+		background: rgba(255, 255, 255, 0.16);
+	}
+`;
+
+const ButtonRow = styled.div`
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: ${unit(12)};
+	width: 100%;
+`;
+
+const LoginButton = styled.button`
+	width: 100%;
+	height: ${unit(40)};
+	border-radius: ${unit(4)};
+	border: 0;
+	background: #4f75db;
+	color: white;
+	font-size: ${unit(14)};
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s;
+
+	&:hover:not(:disabled) {
+		opacity: 0.92;
+	}
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+`;
+
+const ErrorMessage = styled.div`
+	color: #ffd6d6;
+	font-size: ${unit(13)};
+	text-align: center;
+	margin-top: ${unit(4)};
 `;

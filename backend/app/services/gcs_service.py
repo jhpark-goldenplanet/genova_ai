@@ -12,6 +12,7 @@ import aiofiles
 from fastapi import UploadFile
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
+from google.oauth2 import service_account
 
 from app.core.ai_config import ai_client_manager
 from app.core.exceptions import ErrorCodes, StorageException
@@ -32,11 +33,29 @@ class GCSService:
         self.bucket_name = bucket_name or os.getenv(
             "GCS_BUCKET_NAME", "genova-ai-videos"
         )
-        self.project_id = os.getenv("GCP_PROJECT_ID")
-        
+        self.project_id = (
+            os.getenv("GCP_PROJECT_ID")
+            or os.getenv("GOOGLE_CLOUD_PROJECT")
+            or ""
+        )
+
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        credentials = None
+
+        # Explicitly load service account credentials when provided.
+        # This avoids implicit/default credential ambiguity that can break signed URL generation.
+        if credentials_path and os.path.exists(credentials_path):
+            credentials = service_account.Credentials.from_service_account_file(
+                credentials_path,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+
         # Initialize the client
         try:
-            self.client = storage.Client(project=self.project_id)
+            self.client = storage.Client(
+                project=self.project_id if self.project_id else None,
+                credentials=credentials,
+            )
             self.bucket = self.client.bucket(self.bucket_name)
         except Exception as e:
             raise StorageException(f"Failed to initialize GCS client: {str(e)}")
@@ -385,7 +404,8 @@ class GCSService:
         self,
         gcs_path: str,
         expiration_hours: int = 24,
-        method: str = "GET"
+        method: str = "GET",
+        content_type: Optional[str] = None
     ) -> str:
         """
         Generate signed URL for temporary access to GCS object.
@@ -407,14 +427,17 @@ class GCSService:
         try:
             blob = self.bucket.blob(gcs_path)
             expiration = datetime.now(timezone.utc) + timedelta(hours=expiration_hours)
+            signed_url_kwargs = {
+                "expiration": expiration,
+                "method": method,
+                "version": "v4",
+            }
+            if content_type:
+                signed_url_kwargs["content_type"] = content_type
 
             # Try standard method first (works with service account keys)
             try:
-                signed_url = blob.generate_signed_url(
-                    expiration=expiration,
-                    method=method,
-                    version="v4"
-                )
+                signed_url = blob.generate_signed_url(**signed_url_kwargs)
                 return signed_url
             except Exception as e:
                 # Check if this is a credentials error (Cloud Run environment)
@@ -494,10 +517,8 @@ class GCSService:
 
                 # Generate signed URL using signing credentials
                 signed_url = blob.generate_signed_url(
-                    expiration=expiration,
-                    method=method,
-                    version="v4",
-                    credentials=signing_creds
+                    **signed_url_kwargs,
+                    credentials=signing_creds,
                 )
 
                 logger.info(f"[GCS_SIGNING] Successfully generated signed URL using IAM Signer")
@@ -621,7 +642,7 @@ class GCSService:
             signed_url = self.generate_signed_url(
                 gcs_path=gcs_path,
                 expiration_hours=expiration_hours,
-                method="PUT"
+                method="PUT",
             )
 
             logger.info(f"Generated upload signed URL for video {video_id}: {gcs_path}")

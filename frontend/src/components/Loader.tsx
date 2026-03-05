@@ -1,17 +1,23 @@
 import React, { FC } from 'react';
 import styled from '@emotion/styled';
+import { NAVBAR_WIDTH } from '@/shared/constants';
 
 interface IProps {
 	isLoading: boolean;
 	isFetching: boolean;
+	withSidebar?: boolean;
 	progress?: number; // 업로드 진행률 (0-100)
 }
 
-const Loader: FC<IProps> = ({ isLoading, isFetching, progress }) => {
+interface IContainerProps {
+	withSidebar: boolean;
+}
+
+const Loader: FC<IProps> = ({ isLoading, isFetching, progress, withSidebar = false }) => {
 	if (!(isLoading || isFetching)) return null;
 
 	return (
-		<Container className="wrapper">
+		<Container className="wrapper" $withSidebar={withSidebar}>
 			<figure>
 				<svg viewBox="0 0 100 100" style={{ width: '80px', height: '80px', margin: '0 auto' }}>
 					<defs>
@@ -32,15 +38,14 @@ const Loader: FC<IProps> = ({ isLoading, isFetching, progress }) => {
 	);
 };
 
-const Container = styled.div`
+const Container = styled.div<IContainerProps>`
 	position: fixed;
-	width: 100vw;
-	max-width: 100vw;
-	min-height: 100vh;
 	top: 0;
-	left: 0;
-	bottom: 0;
 	right: 0;
+	bottom: 0;
+	left: ${({ $withSidebar }) => ($withSidebar ? NAVBAR_WIDTH : '0px')};
+	width: auto;
+	min-height: 100vh;
 	background-color: rgba(0, 0, 0, 0.7);
 	display: flex;
 	justify-content: center;

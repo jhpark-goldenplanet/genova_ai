@@ -1,16 +1,10 @@
-import {
-	useAnalyzeVideo,
-	useGetStatusFile,
-	useGetStatusProgressSummary,
-	useGetStatusProgressTranscribe,
-} from './queries/video';
-import { useParams, useRouter } from 'next/navigation';
-import { LanguageCode } from '@/typings/schema';
+import { useAnalyzeVideo, useGetStatusProgressTranscribe } from './queries/video';
+import { useParams } from 'next/navigation';
+import { EStatus, LanguageCode } from '@/typings/schema';
 
 const useGetVideoInfoForScript = (language?: LanguageCode) => {
 	const { videoId: videoIdParams } = useParams();
 	const videoId = videoIdParams as string;
-	const router = useRouter();
 
 
 
@@ -18,6 +12,9 @@ const useGetVideoInfoForScript = (language?: LanguageCode) => {
 
 	// const { data: videoStatusResult, isError: isGetStatusError } = useGetStatusFile(videoId);
 	const { data: videoStatusResult, isError: isGetStatusError } = useGetStatusProgressTranscribe(videoId);
+	const status = videoStatusResult?.status;
+	const step = videoStatusResult?.step;
+	const isConvertingStatus = status === 'PENDING' || status === 'IN_PROGRESS';
 
 	const isStatusComplete = videoStatusResult?.status === 'COMPLETE';
 	const isFailedStatus =
@@ -38,7 +35,17 @@ const useGetVideoInfoForScript = (language?: LanguageCode) => {
 	const isLoaded = isFailedStatus || isFetchedAnalyze;
 	const isError = isGetStatusError || analyzeError || isFailedStatus;
 
-	return { isLoaded, isError, videoInfo, videoId, percentage, originLanguage: videoInfo?.source_language ?? '' };
+	return {
+		isLoaded,
+		isError,
+		videoInfo,
+		videoId,
+		percentage,
+		originLanguage: videoInfo?.source_language ?? '',
+		status: status as EStatus | undefined,
+		step,
+		isConverting: isConvertingStatus,
+	};
 };
 
 export default useGetVideoInfoForScript;

@@ -1,6 +1,6 @@
 import { useAnalyzeVideo, useGetStatusFile, useGetStatusProgressSummary } from './queries/video';
 import { useParams, useRouter } from 'next/navigation';
-import { LanguageCode } from '@/typings/schema';
+import { EStatus, LanguageCode } from '@/typings/schema';
 
 const useGetVideoInfo = (language?: LanguageCode) => {
 	const { videoId: videoIdParams } = useParams();
@@ -9,6 +9,9 @@ const useGetVideoInfo = (language?: LanguageCode) => {
 
 	// const { data: videoStatusResult, isError: isGetStatusError, error: statusError } = useGetStatusFile(videoId);
 	const { data: videoStatusResult, isError: isGetStatusError, error: statusError } = useGetStatusProgressSummary(videoId);
+	const status = videoStatusResult?.status;
+	const step = videoStatusResult?.step;
+	const isConvertingStatus = status === 'PENDING' || status === 'IN_PROGRESS';
 
 	const isStatusComplete = videoStatusResult?.status === 'COMPLETE';
 	const isFailedStatus =
@@ -46,7 +49,10 @@ const useGetVideoInfo = (language?: LanguageCode) => {
 		videoId,
 		percentage,
 		originLanguage: videoInfo?.source_language ?? '',
-		error // 에러 객체 추가
+		error, // 에러 객체 추가
+		status: status as EStatus | undefined,
+		step,
+		isConverting: isConvertingStatus,
 	};
 };
 

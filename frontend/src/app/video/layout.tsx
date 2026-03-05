@@ -1,63 +1,136 @@
 'use client';
 
 import logo_navy from '@images/logo_navy.png';
-import ico_plus from '@images/ico_plus.png';
 import ico_summary from '@images/ico_summary.png';
 import ico_script from '@images/ico_script.png';
 import ico_split from '@images/ico_split.png';
-import ico_edit from '@images/ico_edit.png';
 import * as S from './styled';
-import Image from 'next/image';
-import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import * as RootS from '../(root)/styled';
+import Image, { StaticImageData } from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
+import { flushSync } from 'react-dom';
+import { startTransition, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import useGetVideoInfo from '@/shared/hooks/useGetVideoInfo';
-import { isUndefined } from 'lodash-es';
-import { errorToast } from '@/shared/utils/toastUtils';
+import { errorToast, successToast } from '@/shared/utils/toastUtils';
 import { useModal } from '@/shared/hooks';
-import Skeleton from 'react-loading-skeleton';
-import { unit } from '@/shared/utils/base';
-import NewVideoModal from './components/NewVideoModal';
 import Loader from '@/components/Loader';
-import { useLanguageStore } from '@/shared/store/language';
+import { useGetStatusProgressSummary } from '@/shared/hooks/queries/video';
+import { EStatus } from '@/typings/schema';
 
-const NAV_MENUS = [
+const TIMEOUT_INTERVAL = 900 * 1000; // 15분
+const LAST_VIDEO_ID_KEY = 'genova_active_video_id';
+const ROUTE_TRANSITION_STORAGE_KEY = 'genova_route_transition_active';
+const ROUTE_TRANSITION_MS = 220;
+
+type MenuPath = string | ((videoId: string | null) => string);
+
+interface MenuItem {
+	key: string;
+	label: string;
+	path: MenuPath;
+	iconType: 'inline' | 'image';
+	icon?: StaticImageData;
+	requiresVideo?: boolean;
+	disabledMessage?: string;
+}
+
+const ROOT_MENUS: MenuItem[] = [
 	{
+		key: 'upload',
+		label: '영상 업로드',
+		path: '/',
+		iconType: 'inline',
+	},
+	{
+		key: 'summary',
+		label: '요약 정리',
+		path: (videoId: string | null) => (videoId ? `/video/${videoId}/summary` : ''),
+		iconType: 'image',
 		icon: ico_summary,
-		keyword: 'summary',
-		title: '요약 정리',
+		requiresVideo: true,
+		disabledMessage: '영상 업로드 후 이용해주세요',
 	},
 	{
+		key: 'script',
+		label: '스크립트',
+		path: (videoId: string | null) => (videoId ? `/video/${videoId}/script` : ''),
+		iconType: 'image',
 		icon: ico_script,
-		keyword: 'script',
-		title: '스크립트',
+		requiresVideo: true,
+		disabledMessage: '영상 업로드 후 이용해주세요',
 	},
 	{
+		key: 'split',
+		label: '영상 분할',
+		path: (videoId: string | null) => (videoId ? `/video/${videoId}/split` : ''),
+		iconType: 'image',
 		icon: ico_split,
-		keyword: 'split',
-		title: '영상 분할',
+		requiresVideo: true,
+		disabledMessage: '영상 업로드 후 이용해주세요',
+	},
+	{
+		key: 'members',
+		label: '회원 관리',
+		path: '/members',
+		iconType: 'inline',
 	},
 ];
 
-const TIMEOUT_INTERVAL = 900 * 1000; // 15분
+const findMenuLabel = (menuKey: string | null) => {
+	const menu = ROOT_MENUS.find((item) => item.key === menuKey);
+	return menu?.label ?? '';
+};
+
+const UploadMenuIcon = () => (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+		<path d="M12 4v12" />
+		<path d="M7 9l5-5 5 5" />
+		<path d="M6 20h12" />
+	</svg>
+);
+
+const MembersMenuIcon = () => (
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+		<circle cx="12" cy="8" r="3.5" />
+		<path d="M5 20c1.2-3.8 3.8-6 7-6s5.8 2.2 7 6" />
+	</svg>
+);
 
 export default function VideoLayout({ children }: { children: React.ReactNode }) {
-	const { alert, confirm, closeConfirm, custom, closeFreeModal } = useModal();
-	const { language, dispatchLanguage } = useLanguageStore((state) => state);
+	const { user, signOut } = useAuth();
+	const { alert } = useModal();
 
 	const router = useRouter();
-	const pathName = usePathname();
+	const pathname = usePathname() ?? '';
 
-	const { isLoaded, isError, videoInfo, videoId, error } = useGetVideoInfo();
+	const { isLoaded, isError, videoInfo, videoId, error, status } = useGetVideoInfo();
+	const [storedVideoId, setStoredVideoId] = useState<string | null>(() => {
+		if (typeof window === 'undefined') {
+			return null;
+		}
+		return window.localStorage.getItem(LAST_VIDEO_ID_KEY);
+	});
 
-	const [videoTitle, setVideoTitle] = useState('');
 	const [isBusy, setIsBusy] = useState(false);
-	const [isEditing, setIsEditing] = useState(false);
+	const [pendingMenuKey, setPendingMenuKey] = useState<string | null>(null);
+	const [pendingPath, setPendingPath] = useState<string | null>(null);
+	const [isNavigationPending, setIsNavigationPending] = useState(false);
+	const [isRouteTransitioning, setIsRouteTransitioning] = useState<boolean>(() => {
+		if (typeof window === 'undefined') {
+			return false;
+		}
 
-	const inputRef = useRef<HTMLInputElement>(null);
+		return window.sessionStorage.getItem(ROUTE_TRANSITION_STORAGE_KEY) === '1';
+	});
+	const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const conversionToCompleteRef = useRef(false);
+	const hasCompletionNotifiedRef = useRef(false);
+
 	const intervalRef = useRef<any>(null);
 	const startTimeRef = useRef<number>(Date.now());
 
-	const isReady = isLoaded && !isError && !isUndefined(videoInfo);
+	const isReady = isLoaded && !isError && !!videoInfo;
 
 	// 에러 메시지 생성 함수
 	const getErrorMessage = (error: any) => {
@@ -65,10 +138,9 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 		const error_code = errorData?.error_code;
 		const retryable = errorData?.retryable;
 
-		// retryable이 명시되지 않은 경우 에러 코드로 판단
+		// shouldRetry 값 계산
 		let shouldRetry = retryable;
 		if (retryable === undefined || retryable === null) {
-			// 1000번대 user_error는 재시도 불가
 			if (error_code >= 1000 && error_code < 1100) {
 				shouldRetry = false;
 			} else {
@@ -81,8 +153,6 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 		if (error_code === 1003) {
 			errorMsg = '영상 길이는 최소 1분 이상이어야 합니다.';
 		} else if (error_code === 1008 || error_code === 1005) {
-			// 1008: VIDEO_TOO_LONG (문서 기준)
-			// 1005: 백엔드가 현재 보내는 코드 (임시 처리)
 			errorMsg = '영상 길이는 최대 45분까지 업로드 가능합니다.';
 		} else if (error_code === 1002) {
 			errorMsg = '파일 크기가 500MB를 초과합니다.';
@@ -102,7 +172,6 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 			errorMsg = '영상 생성 중 오류가 발생했습니다.';
 		}
 
-		// shouldRetry가 true인 경우에만 재시도 문구 추가
 		if (shouldRetry) {
 			errorMsg += '\n잠시 후 다시 시도해주세요.';
 		}
@@ -111,22 +180,19 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 	};
 
 	useEffect(() => {
-		// 5초마다 실행되는 체크 함수
 		const check = () => {
 			try {
-				// 현재 시간과 시작 시간의 차이 계산 (밀리초)
 				const elapsedTime = Date.now() - startTimeRef.current;
 
-				// 이미 에러가 발생했거나 준비가 완료되면 interval 정리
 				if (isReady || isError) {
 					clearInterval(intervalRef.current);
-				}
-				//
-				else if (elapsedTime >= TIMEOUT_INTERVAL) {
+				} else if (elapsedTime >= TIMEOUT_INTERVAL) {
 					alert({
-						message: `영상 생성 시간이 초과되었습니다.\n처음부터 다시 시도해주세요.`,
+						message: `영상 생성 시간이 초과되었습니다.\\n처음부터 다시 시도해주세요.`,
 						onAfterClose: () => {
+						startTransition(() => {
 							router.push('/');
+						});
 						},
 					});
 					clearInterval(intervalRef.current);
@@ -146,12 +212,6 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 	}, [isReady, isError]);
 
 	useEffect(() => {
-		if (!isUndefined(videoInfo?.title)) {
-			setVideoTitle(videoInfo.title);
-		}
-	}, [videoInfo?.title]);
-
-	useEffect(() => {
 		if (isError) {
 			setTimeout(() => {
 				const errorMessage = getErrorMessage(error);
@@ -159,10 +219,8 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 				const error_code = errorData?.error_code;
 				const retryable = errorData?.retryable;
 
-				// retryable이 명시되지 않은 경우 에러 코드로 판단
 				let shouldRetry = retryable;
 				if (retryable === undefined || retryable === null) {
-					// 1000번대 user_error는 재시도 불가
 					if (error_code >= 1000 && error_code < 1100) {
 						shouldRetry = false;
 					} else {
@@ -173,9 +231,10 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 				alert({
 					message: errorMessage,
 					onAfterClose: () => {
-						// retryable이 false면 홈으로, true면 새로고침
 						if (shouldRetry === false) {
-							router.push('/');
+							startTransition(() => {
+								router.push('/');
+							});
 						} else {
 							window.location.reload();
 						}
@@ -185,152 +244,220 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 		}
 	}, [isError, error]);
 
-	const goToSelectedMenu = (keyword: string) => {
-		if (!isReady) {
-			if (isError) {
-				errorToast('에러가 발생했습니다. 잠시 후 다시 시도해주세요.');
-			} else {
-				errorToast('영상 정보를 불러오는 중입니다. 잠시만 기다려주세요.');
-			}
+	const pathParts = pathname.split('/').filter(Boolean);
+	const activeVideoId = pathParts[0] === 'video' && pathParts[1] ? pathParts[1] : null;
+	const effectiveVideoId = activeVideoId || videoId || storedVideoId;
+	const hasExistingWork = !!effectiveVideoId;
+	const isConverting = status === 'PENDING' || status === 'IN_PROGRESS';
+	const { data: videoStatus } = useGetStatusProgressSummary(effectiveVideoId || undefined);
+	const conversionStatus = videoStatus?.status as EStatus | undefined;
+	const isConvertingByStatus = conversionStatus === 'PENDING' || conversionStatus === 'IN_PROGRESS';
+	const isConvertingNow = isConverting || isConvertingByStatus;
 
+	const activeMenu = (() => {
+		if (pathname === '/') return 'upload';
+		if (pathname.startsWith('/members')) return 'members';
+		if (pathname.includes('/summary')) return 'summary';
+		if (pathname.includes('/script')) return 'script';
+		if (pathname.includes('/split')) return 'split';
+		return '';
+	})();
+	const activeMenuKey = pendingMenuKey || activeMenu;
+
+	const pageTitle = (() => {
+		if (pathname === '/') return '영상 업로드';
+		if (pathname.startsWith('/members')) return '회원 관리';
+		if (pathname.includes('/summary')) return '요약 정리';
+		if (pathname.includes('/script')) return '스크립트';
+		if (pathname.includes('/split')) return '영상 분할';
+		return 'Genova AI';
+	})();
+	const displayPageTitle = pendingMenuKey ? findMenuLabel(pendingMenuKey) : pageTitle;
+
+	useEffect(() => {
+		if (!effectiveVideoId) {
+			conversionToCompleteRef.current = false;
+			hasCompletionNotifiedRef.current = false;
 			return;
 		}
 
-		router.push(`/video/${videoId}/${keyword}`);
-	};
+		if (isConvertingNow) {
+			conversionToCompleteRef.current = true;
+			hasCompletionNotifiedRef.current = false;
+			return;
+		}
 
-	const goToInitalPage = () => {
-		confirm({
-			message: `다른 영상으로 시작하면\n진행 중인 작업 내용이 모두 사라집니다.\n정말 실행하시겠습니까?`,
-			okHandler: () => {
-				closeConfirm();
+		if (conversionToCompleteRef.current && conversionStatus === 'COMPLETE' && !hasCompletionNotifiedRef.current) {
+			successToast('작업이 완료되었습니다');
+			hasCompletionNotifiedRef.current = true;
+		}
 
-				custom({
-					children: <NewVideoModal setIsBusy={setIsBusy} onClose={closeFreeModal} />,
-				});
-			},
+		if (conversionStatus && !isConvertingNow) {
+			conversionToCompleteRef.current = false;
+		}
+	}, [conversionStatus, effectiveVideoId, isConvertingNow]);
+
+	const handleMove = (path: string, menuKey: string) => {
+		if (pathname === path) {
+			return;
+		}
+
+		flushSync(() => {
+			setPendingMenuKey(menuKey);
+			setPendingPath(path);
+			setIsNavigationPending(true);
+			setIsRouteTransitioning(true);
 		});
+		if (typeof window !== 'undefined') {
+			window.sessionStorage.setItem(ROUTE_TRANSITION_STORAGE_KEY, '1');
+		}
+		router.prefetch(path);
+		router.push(path);
 	};
 
-	const handleHeaderClick = () => {
-		confirm({
-			message: '현재 영상을 종료하고 메인 화면으로 이동하시겠습니까?',
-			okHandler: () => {
-				closeConfirm();
-				router.push('/');
-			},
-		});
+	useEffect(() => {
+		if (!isRouteTransitioning) {
+			return;
+		}
+
+		if (transitionTimerRef.current) {
+			clearTimeout(transitionTimerRef.current);
+		}
+
+		transitionTimerRef.current = setTimeout(() => {
+			setPendingMenuKey(null);
+			setPendingPath(null);
+			setIsNavigationPending(false);
+			setIsRouteTransitioning(false);
+			if (typeof window !== 'undefined') {
+				window.sessionStorage.removeItem(ROUTE_TRANSITION_STORAGE_KEY);
+			}
+		}, ROUTE_TRANSITION_MS);
+
+		return () => {
+			if (transitionTimerRef.current) {
+				clearTimeout(transitionTimerRef.current);
+			}
+		};
+	}, [isRouteTransitioning]);
+
+	useEffect(() => {
+		return () => {
+			if (transitionTimerRef.current) {
+				clearTimeout(transitionTimerRef.current);
+			}
+		};
+	}, []);
+
+	const handleLogout = async () => {
+		try {
+			if (typeof window !== 'undefined') {
+				window.localStorage.removeItem(LAST_VIDEO_ID_KEY);
+				setStoredVideoId(null);
+			}
+			await signOut();
+		} catch (error) {
+			errorToast('로그아웃에 실패했습니다.');
+		}
 	};
 
-	const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const newValue = e.target.value;
-		setVideoTitle(newValue);
-	};
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+
+		if (activeVideoId) {
+			window.localStorage.setItem(LAST_VIDEO_ID_KEY, activeVideoId);
+			setStoredVideoId(activeVideoId);
+			return;
+		}
+
+		const cachedVideoId = window.localStorage.getItem(LAST_VIDEO_ID_KEY);
+		setStoredVideoId(cachedVideoId);
+	}, [activeVideoId]);
+
+	const isNavigatingToUpload = isNavigationPending && pendingPath === '/';
 
 	return (
-		<S.VideoWrapper>
-			<S.LeftNavBar>
-				<S.NewThreadButton type="button" onClick={goToInitalPage}>
-					<Image className="ico-plus" src={ico_plus} alt="ico-plus" width={18.5} height={18.5} />
-					<span>새 영상</span>
-				</S.NewThreadButton>
+		<>
+			<RootS.SideNav>
+				<div>
+					<RootS.SideNavBrand>
+						<Image src={logo_navy} alt="genova-logo" width={24} height={24} />
+						<span>Genova AI</span>
+					</RootS.SideNavBrand>
 
-				<S.MenuWrapper>
-					{NAV_MENUS.map(({ icon, title, keyword }) => {
-						const isSelected = pathName.includes(keyword);
-						const className = isSelected ? 'selected-menu' : '';
-						return (
-							<S.Menu key={title} className={className} onClick={() => goToSelectedMenu(keyword)}>
-								<Image className="menu-icon" src={icon} alt={title} width={18.5} height={18.5} />
-								<span>{title}</span>
-							</S.Menu>
-						);
-					})}
-				</S.MenuWrapper>
-			</S.LeftNavBar>
+					<RootS.SideMenu>
+								{ROOT_MENUS.map((menu) => {
+								const isActive = activeMenuKey === menu.key;
+								const isConvertingDisabled =
+									(menu.key === 'script' || menu.key === 'split') && isConvertingNow;
+								const isNoExistingWork = !!menu.requiresVideo && !hasExistingWork;
+								const isDisabled = !!menu.requiresVideo && (isNoExistingWork || isConvertingDisabled);
+								const targetPath = typeof menu.path === 'function' ? menu.path(effectiveVideoId) : menu.path;
+								const tooltipMessage =
+									isConvertingDisabled
+										? '영상 분석중'
+										: isNoExistingWork
+										? menu.disabledMessage || '영상 업로드 후 이용해주세요'
+										: '';
 
-			{/*  */}
-
-			<S.VideoTitleWraper>
-				{isReady ? (
-					<S.VideoTitleInput
-						ref={inputRef}
-						name="input"
-						placeholder="영상 제목을 입력해주세요!"
-						value={videoTitle}
-						// disabled={!isEditing}
-						// onKeyDown={handleKeyDown}
-						onChange={handleTitleChange}
-						maxLength={80}
-						isEditing={isEditing}
-						onFocus={() => {
-							setIsEditing(true);
-						}}
-						onBlur={() => {
-							setTimeout(() => {
-								setIsEditing(false);
-							}, 200);
-						}}
-						onKeyDown={(e) => {
-							if (e.key === 'Enter') {
-								inputRef.current?.blur();
-							}
-						}}
-					/>
-				) : (
-					<S.SkeletonWrapper>
-						<Skeleton width={unit(846)} />
-					</S.SkeletonWrapper>
-				)}
-				<Image
-					className="ico-edit"
-					src={ico_edit}
-					alt="ico-edit"
-					width={21}
-					height={21}
-					onClick={() => {
-						if (isEditing) {
-							inputRef.current?.blur();
-						} else {
-							inputRef.current?.focus();
-						}
-					}}
-					role="button"
-				/>
-			</S.VideoTitleWraper>
-
-			{children}
-
-			<S.FixedHeader>
-				<div className="logo-row">
-					<Image onClick={handleHeaderClick} className="logo-navy" src={logo_navy} alt="logo-navy" height={26} />
-					<span>Genova AI</span>
+								return (
+								<RootS.SideMenuItem key={menu.key} $active={isActive} $disabled={isDisabled}>
+									<RootS.SideMenuAction
+										disabled={isDisabled}
+										type="button"
+										aria-disabled={isDisabled}
+										data-tooltip={tooltipMessage || undefined}
+										onClick={() => {
+											if (isDisabled) {
+												errorToast(tooltipMessage);
+												return;
+											}
+									if (!targetPath) {
+											errorToast(menu.disabledMessage || '현재 분석 중인 영상이 없습니다.');
+											return;
+										}
+											handleMove(targetPath, menu.key);
+										}}
+									>
+										{menu.iconType === 'inline' ? (
+											menu.key === 'upload' ? (
+												<UploadMenuIcon />
+											) : (
+												<MembersMenuIcon />
+											)
+										) : (
+											<Image className="menu-icon-image" src={menu.icon!} alt={menu.label} width={18.5} height={18.5} />
+										)}
+										<span>{menu.label}</span>
+									</RootS.SideMenuAction>
+								</RootS.SideMenuItem>
+							);
+						})}
+					</RootS.SideMenu>
 				</div>
 
-				<S.FixedHeaderButtonArea>
-					<S.LanguageSelector
-						value={language}
-						onChange={(e) => {
-							if (!isReady) {
-								if (isError) {
-									errorToast('에러가 발생했습니다. 잠시 후 다시 시도해주세요.');
-								} else {
-									errorToast('영상 정보를 불러오는 중입니다. 잠시만 기다려주세요.');
-								}
-								return;
-							}
-							dispatchLanguage(e.target.value);
-						}}
-					>
-						<option value="ko">한국어</option>
-						<option value="en">English</option>
-						<option value="ja">日本語</option>
-						<option value="zh">中文</option>
-						<option value="vi">Tiếng Việt</option>
-					</S.LanguageSelector>
-				</S.FixedHeaderButtonArea>
-			</S.FixedHeader>
-			<Loader isLoading={isBusy} isFetching={isBusy} />
-		</S.VideoWrapper>
+				<RootS.SideNavSpacer />
+
+				<RootS.SideNavFooter>
+					<RootS.SideNavUser>{user?.email}</RootS.SideNavUser>
+					<RootS.SideNavButton onClick={handleLogout}>로그아웃</RootS.SideNavButton>
+				</RootS.SideNavFooter>
+			</RootS.SideNav>
+
+			{!isNavigatingToUpload ? (
+				<S.FixedHeader>
+					<div className="page-title">{displayPageTitle}</div>
+				</S.FixedHeader>
+			) : null}
+
+			<S.VideoWrapper>
+				<S.RouteTransitionContent $isLoading={isRouteTransitioning}>
+					{children}
+				</S.RouteTransitionContent>
+				<Loader isLoading={isBusy} isFetching={isBusy} withSidebar />
+			</S.VideoWrapper>
+		</>
 	);
 }

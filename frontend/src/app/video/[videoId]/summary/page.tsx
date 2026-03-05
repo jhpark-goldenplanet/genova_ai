@@ -19,6 +19,7 @@ import { successToast } from '@/shared/utils/toastUtils';
 import { useModal } from '@/shared/hooks';
 import TimelineSummarySkeleton from './components/TimelineSummarySkeleton';
 import { useLanguageStore } from '@/shared/store/language';
+import AnimatedSelect from '@/components/AnimatedSelect';
 
 const TOTAL_STEPS = (60 * 2.5) / 2; // 10분 동안 2초마다
 
@@ -33,8 +34,9 @@ export default function Summary() {
 	const [requestLanguage, setRequestLanguage] = useState<string | undefined>(
 		language !== 'ko' ? (language as any) : undefined
 	);
-	const { isLoaded, isError, videoInfo, originLanguage } = useGetVideoInfo(requestLanguage as any);
+	const { isLoaded, isError, videoInfo, originLanguage, status } = useGetVideoInfo(requestLanguage as any);
 	const isReady = isLoaded && !isError && !isUndefined(videoInfo) && videoInfo.segments.length > 0;
+	const isConverting = status === 'PENDING' || status === 'IN_PROGRESS';
 
 	const [timestamp, setTimestamp] = useState<ISegmentsSchema[]>();
 	const [selectedSummaryIndex, setSelectedSummaryIndex] = useState(0);
@@ -116,6 +118,23 @@ export default function Summary() {
 
 	return (
 		<S.Main>
+			<S.PageTopBar>
+				<S.PageDescription>영상 핵심 구간의 타임라인 요약과 키워드를 확인할 수 있습니다.</S.PageDescription>
+				<S.PageTopActions>
+					<AnimatedSelect
+						value={language}
+						onChange={(nextValue) => dispatchLanguage(nextValue)}
+						options={[
+							{ value: 'ko', label: '한국어' },
+							{ value: 'en', label: 'English' },
+							{ value: 'ja', label: '日本語' },
+							{ value: 'zh', label: '中文' },
+							{ value: 'vi', label: 'Tiếng Việt' },
+						]}
+					/>
+				</S.PageTopActions>
+			</S.PageTopBar>
+
 			<S.DashboardContainer isReady={isReady}>
 				<S.DashboardLeft>
 					<S.VideoWrapper>
@@ -127,8 +146,8 @@ export default function Summary() {
 								<S.LoaderContainer>
 									<LoaderOnly />
 									<strong className="percentage">{`${count}%`}</strong>
-									<h3>영상을 핵심 주제별로 분할 중입니다. 🚀</h3>
-									<p>이 작업은 최대 10분까지 소요될 수 있습니다.</p>
+									<h3>{isConverting ? '변환 중입니다. 🚀' : '영상을 핵심 주제별로 분할 중입니다. 🚀'}</h3>
+									<p>{isConverting ? '요약/스크립트/분할 데이터가 준비되는 중입니다.' : '이 작업은 최대 10분까지 소요될 수 있습니다.'}</p>
 									<button
 										type="button"
 										onClick={() => {

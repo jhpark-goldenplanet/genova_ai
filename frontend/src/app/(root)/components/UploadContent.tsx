@@ -1,20 +1,17 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import * as S from '../styled';
 import { useModal } from '@/shared/hooks';
 import { errorToast } from '@/shared/utils/toastUtils';
 import { FileRejection, useDropzone } from 'react-dropzone';
 import { isEmpty, uniqBy } from 'lodash-es';
 import { SubmitHandler, useForm } from 'react-hook-form';
-import Image from 'next/image';
-import logo_icon from '@images/logo_icon.png';
 import { ACCEPTED_VIDEO_TYPES, validateFileTypes } from '../helper';
-import { uploadByFile, getUploadUrl, uploadToGCS, confirmUpload } from '@/shared/apis/video';
+import { getUploadUrl, uploadToGCS, confirmUpload } from '@/shared/apis/video';
 import Loader from '@/components/Loader';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import InsertLinkModal from './InsertLinkModal';
-import { useAuth } from '@/context/AuthContext';
 
 interface IFormValues {
 	files: any;
@@ -24,18 +21,43 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_FILE_LENGTH = 1;
 const MIN_VIDEO_DURATION = 60; // 1분
 const MAX_VIDEO_DURATION = 2700; // 45분
+const LAST_VIDEO_ID_KEY = 'genova_active_video_id';
 
 export default function UploadContent() {
-	const { user, signOut } = useAuth();
 	const router = useRouter();
-	const { custom, closeFreeModal } = useModal();
+	const pathname = usePathname();
+	const { custom, closeFreeModal, confirm, closeConfirm } = useModal();
 
 	const [isBusy, setIsBusy] = useState(false);
 	const [uploadProgress, setUploadProgress] = useState(0);
+	const [hasExistingWork, setHasExistingWork] = useState(false);
 
 	const { register, handleSubmit, setValue, watch } = useForm<IFormValues>();
 
 	const watchFiles: File[] = watch('files');
+
+	const handleProceedWithExistingWorkCheck = (next: () => void) => {
+		if (!hasExistingWork) {
+			next();
+			return;
+		}
+
+		confirm({
+			message: '새 영상을 업로드하면 기존 분석 결과가 초기화됩니다.\n계속 진행하시겠습니까?',
+			okHandler: () => {
+				closeConfirm();
+				next();
+			},
+		});
+	};
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+
+		setHasExistingWork(!!window.localStorage.getItem(LAST_VIDEO_ID_KEY));
+	}, [pathname]);
 
 	const validateVideoDuration = (file: File): Promise<boolean> => {
 		return new Promise((resolve) => {
@@ -92,8 +114,9 @@ export default function UploadContent() {
 			}
 
 			setValue('files', newFiles);
-
-			handleSubmit(onSubmit)();
+			handleProceedWithExistingWorkCheck(() => {
+				handleSubmit(onSubmit)();
+			});
 		}
 	};
 
@@ -148,18 +171,19 @@ export default function UploadContent() {
 
 		try {
 			const file = files[0];
+			const contentType = (file.type || 'video/mp4').split(';')[0].trim().toLowerCase();
 
 			// Step 1: Signed URL 요청
 			console.log('[Step 1] Requesting upload URL...');
 			const { upload_url, video_id } = await getUploadUrl({
 				filename: file.name,
-				content_type: file.type,
+				content_type: contentType,
 				file_size: file.size,
 			});
 
 			// Step 2: GCS에 직접 업로드 (진행률 표시)
 			console.log('[Step 2] Uploading to GCS...', { video_id });
-			await uploadToGCS(upload_url, file, (progress) => {
+			await uploadToGCS(upload_url, file, contentType, (progress) => {
 				setUploadProgress(Math.floor(progress));
 				console.log(`Upload progress: ${Math.floor(progress)}%`);
 			});
@@ -192,9 +216,11 @@ export default function UploadContent() {
 	};
 
 	const handleInsertLink = () => {
-		custom({
-			needCloseButton: true,
-			children: <InsertLinkModal setIsBusy={setIsBusy} onClose={() => closeFreeModal()} />,
+		handleProceedWithExistingWorkCheck(() => {
+			custom({
+				needCloseButton: true,
+				children: <InsertLinkModal setIsBusy={setIsBusy} onClose={() => closeFreeModal()} />,
+			});
 		});
 	};
 
@@ -214,27 +240,8 @@ export default function UploadContent() {
 		},
 	});
 
-	const handleLogout = async () => {
-		try {
-			await signOut();
-		} catch (error) {
-			errorToast('로그아웃에 실패했습니다.');
-		}
-	};
-
 	return (
 		<S.Container>
-			<S.Header>
-				<S.HeaderLeft>
-					<Image className="logo-image" src={logo_icon} alt="logo-icon" width={34} height={33} />
-					<span>Genova AI</span>
-				</S.HeaderLeft>
-				<S.HeaderRight>
-					<S.UserInfo>{user?.email}</S.UserInfo>
-					<S.LogoutButton onClick={handleLogout}>로그아웃</S.LogoutButton>
-				</S.HeaderRight>
-			</S.Header>
-
 			<S.Main {...getRootProps()}>
 				<input {...getInputProps()} />
 
@@ -322,7 +329,7 @@ export default function UploadContent() {
 				</S.TermsRow>
 			</S.Footer>
 
-			<Loader isLoading={isBusy} isFetching={isBusy} progress={uploadProgress} />
+			<Loader isLoading={isBusy} isFetching={isBusy} progress={uploadProgress} withSidebar />
 		</S.Container>
 	);
 }

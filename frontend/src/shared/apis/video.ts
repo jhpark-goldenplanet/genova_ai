@@ -71,7 +71,17 @@ export const getUploadUrl = (payload: IGetUploadUrlPayload): Promise<IGetUploadU
 };
 
 // GCS 직접 업로드 - Step 2: GCS에 파일 업로드
-export const uploadToGCS = async (uploadUrl: string, file: File, onProgress?: (progress: number) => void): Promise<void> => {
+export const uploadToGCS = async (
+	uploadUrl: string,
+	file: File,
+	contentType?: string,
+	onProgress?: (progress: number) => void,
+): Promise<void> => {
+	const normalizedContentType = (contentType || file.type || 'video/mp4')
+		.split(';')[0]
+		.trim()
+		.toLowerCase();
+
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
 
@@ -105,7 +115,7 @@ export const uploadToGCS = async (uploadUrl: string, file: File, onProgress?: (p
 
 		// PUT 요청으로 파일 업로드
 		xhr.open('PUT', uploadUrl);
-		xhr.setRequestHeader('Content-Type', file.type);
+		xhr.setRequestHeader('Content-Type', normalizedContentType);
 		xhr.send(file);
 	});
 };
