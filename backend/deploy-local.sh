@@ -7,6 +7,7 @@
 #
 # Prerequisites:
 # - Python 3.12+ installed
+# - uv installed
 # - .env file with required environment variables
 # - Local PostgreSQL and Redis running (use ../setup-local-env.sh)
 #
@@ -35,34 +36,25 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-# Check if virtual environment exists
-if [ ! -d ".venv" ]; then
-    echo -e "${YELLOW}Virtual environment not found. Creating...${NC}"
-    python -m venv .venv
+# Check if uv is installed
+if ! command -v uv >/dev/null 2>&1; then
+    echo -e "${RED}Error: uv is not installed!${NC}"
     echo ""
+    echo "Install uv first:"
+    echo "  - Windows (PowerShell): irm https://astral.sh/uv/install.ps1 | iex"
+    echo "  - macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo ""
+    exit 1
 fi
 
-# Activate virtual environment
-echo -e "${GREEN}Activating virtual environment...${NC}"
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    # Windows
-    source .venv/Scripts/activate
-else
-    # Unix-like
-    source .venv/bin/activate
-fi
-
-# Install dependencies if requirements.txt changed
-if [ ! -f ".venv/.installed" ] || [ "requirements.txt" -nt ".venv/.installed" ]; then
-    echo -e "${YELLOW}Installing/updating dependencies...${NC}"
-    pip install -r requirements.txt
-    touch .venv/.installed
-    echo ""
-fi
+# Install/update dependencies from pyproject.toml + uv.lock
+echo -e "${YELLOW}Installing/updating dependencies with uv...${NC}"
+uv sync
+echo ""
 
 # Check if PostgreSQL is running
 echo -e "${GREEN}Checking database connection...${NC}"
-if ! python -c "import asyncpg; import asyncio; asyncio.run(asyncpg.connect('postgresql://genova_user:genova_password@localhost:5432/genova_ai'))" 2>/dev/null; then
+if ! uv run python -c "import asyncpg; import asyncio; asyncio.run(asyncpg.connect('postgresql://genova_user:genova_password@localhost:5432/genova_ai'))" 2>/dev/null; then
     echo -e "${RED}Cannot connect to PostgreSQL!${NC}"
     echo ""
     echo "Make sure PostgreSQL is running:"
@@ -85,4 +77,4 @@ echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
 echo ""
 
-uvicorn app.main:app --reload --port 8000
+uv run python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

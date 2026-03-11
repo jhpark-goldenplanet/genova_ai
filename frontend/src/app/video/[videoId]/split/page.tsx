@@ -6,7 +6,6 @@ import ico_reset from '@images/ico_reset.png';
 import Image from 'next/image';
 import TimeRangePicker from '@/components/TimeRangePicker';
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { isUndefined } from 'lodash-es';
 import {
 	convertTimeToSeconds,
@@ -37,7 +36,6 @@ const CLASS_NAMES = ['chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapte
 export default function Split() {
 	const { custom, closeFreeModal } = useModal();
 	const { language, dispatchLanguage } = useLanguageStore((state) => state);
-	const router = useRouter();
 
 	// 첫 로딩 시에는 language 없이 요청 (원본), 이후 언어 변경 시 해당 언어로 요청
 	// 페이지 이동 시 저장된 언어가 있으면 해당 언어로 시작
@@ -103,8 +101,7 @@ export default function Split() {
 
 		warningToast('영상 분석이 진행 중입니다. 요약 정리 화면에서 결과를 확인해주세요.');
 		isNavigatingToSummaryRef.current = true;
-		router.replace(`/video/${videoId}/summary`);
-	}, [isConverting, videoId, router]);
+	}, [isConverting, videoId]);
 
 	useEffect(() => {
 		if (videoInfo?.segments) {

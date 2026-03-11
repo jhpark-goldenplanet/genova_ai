@@ -183,6 +183,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 			return;
 		}
 
+		// Keep pending menu state until the route is actually changed.
+		if (pendingPath && pathname !== pendingPath) {
+			return;
+		}
+
 		if (transitionTimerRef.current) {
 			clearTimeout(transitionTimerRef.current);
 		}
@@ -202,7 +207,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				clearTimeout(transitionTimerRef.current);
 			}
 		};
-	}, [isRouteTransitioning]);
+	}, [isRouteTransitioning, pathname, pendingPath]);
 
 	useEffect(() => {
 		return () => {

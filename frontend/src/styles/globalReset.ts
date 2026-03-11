@@ -76,6 +76,20 @@ const globalStyles = css`
 			z-index: 900;
 		}
 
+		.FreeOverlayBase {
+			opacity: 0;
+		}
+
+		.FreeOverlayAfterOpen {
+			opacity: 1;
+			transition: opacity 0.22s ease;
+		}
+
+		.FreeOverlayBeforeClose {
+			opacity: 0;
+			transition: opacity 0.22s ease;
+		}
+
 		.Modal {
 			background-color: white;
 			min-width: ${unit(280)};
@@ -111,6 +125,23 @@ const globalStyles = css`
 
 		.FreeModal {
 			z-index: 990;
+		}
+
+		.FreeModalBase {
+			opacity: 0;
+			transform: translateY(${unit(18)});
+		}
+
+		.FreeModalAfterOpen {
+			opacity: 1;
+			transform: translateY(0);
+			transition: opacity 0.22s ease, transform 0.22s ease;
+		}
+
+		.FreeModalBeforeClose {
+			opacity: 0;
+			transform: translateY(${unit(18)});
+			transition: opacity 0.22s ease, transform 0.22s ease;
 		}
 	}
 

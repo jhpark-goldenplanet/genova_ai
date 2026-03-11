@@ -46,6 +46,9 @@ steps:
       - '--concurrency=80'
       - '--min-instances=0'
       - '--max-instances=10'
+      - '--set-env-vars=CORS_ORIGINS=https://genova.genaion.net'
+      - '--no-traffic'
+      - '--tag=develop'
 
 images:
   - 'gcr.io/$PROJECT_ID/genova-frontend:latest'

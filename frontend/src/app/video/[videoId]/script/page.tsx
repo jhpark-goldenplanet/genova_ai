@@ -4,7 +4,6 @@ import Image from 'next/image';
 import * as S from './styled';
 import ico_download from '@images/ico_download.png';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { ISegmentsSchema } from '@/typings/schema';
 import { useModal } from '@/shared/hooks';
 import { isUndefined } from 'lodash-es';
@@ -38,7 +37,6 @@ export default function Script() {
 	const isReadyForScript = isLoadedForScript && !isErrorForScript && !isUndefined(videoInfoForScript);
 	const isConverting = status === 'PENDING' || status === 'IN_PROGRESS';
 	const isConvertingRef = useRef(false);
-	const router = useRouter();
 
 	const [timestamp, setTimestamp] = useState<ISegmentsSchema[]>();
 	const [currentVideoId, setCurrentVideoId] = useState<string>();
@@ -113,9 +111,7 @@ export default function Script() {
 			warningToast('영상 분석이 진행 중입니다. 요약 정리 화면에서 결과를 확인해주세요.');
 			isConvertingRef.current = true;
 		}
-
-		router.replace(`/video/${videoId}/summary`);
-	}, [isConverting, videoId, router]);
+	}, [isConverting, videoId]);
 
 	useEffect(() => {
 		if (!isReadyForScript) return;

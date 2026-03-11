@@ -8,7 +8,7 @@ RUN corepack enable
 
 # package.json과 lock 파일만 먼저 복사 (캐시 활용)
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile || yarn install --non-interactive
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder

@@ -320,6 +320,11 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 			return;
 		}
 
+		// Keep pending menu state until the route is actually changed.
+		if (pendingPath && pathname !== pendingPath) {
+			return;
+		}
+
 		if (transitionTimerRef.current) {
 			clearTimeout(transitionTimerRef.current);
 		}
@@ -339,7 +344,7 @@ export default function VideoLayout({ children }: { children: React.ReactNode })
 				clearTimeout(transitionTimerRef.current);
 			}
 		};
-	}, [isRouteTransitioning]);
+	}, [isRouteTransitioning, pathname, pendingPath]);
 
 	useEffect(() => {
 		return () => {

@@ -17,7 +17,7 @@ const Loader: FC<IProps> = ({ isLoading, isFetching, progress, withSidebar = fal
 	if (!(isLoading || isFetching)) return null;
 
 	return (
-		<Container className="wrapper" $withSidebar={withSidebar}>
+		<Container className="wrapper" withSidebar={withSidebar}>
 			<figure>
 				<svg viewBox="0 0 100 100" style={{ width: '80px', height: '80px', margin: '0 auto' }}>
 					<defs>
@@ -43,7 +43,7 @@ const Container = styled.div<IContainerProps>`
 	top: 0;
 	right: 0;
 	bottom: 0;
-	left: ${({ $withSidebar }) => ($withSidebar ? NAVBAR_WIDTH : '0px')};
+	left: ${({ withSidebar }) => (withSidebar ? NAVBAR_WIDTH : '0px')};
 	width: auto;
 	min-height: 100vh;
 	background-color: rgba(0, 0, 0, 0.7);

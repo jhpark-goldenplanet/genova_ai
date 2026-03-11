@@ -55,12 +55,21 @@ const FreeModal: ForwardRefRenderFunction<IModal, Props> = ({ children, needClos
 
 	return (
 		<Modal
-			className="Modal FreeModal"
-			overlayClassName="Overlay FreeOverlay"
+			className={{
+				base: 'Modal FreeModal FreeModalBase',
+				afterOpen: 'FreeModalAfterOpen',
+				beforeClose: 'FreeModalBeforeClose',
+			}}
+			overlayClassName={{
+				base: 'Overlay FreeOverlay FreeOverlayBase',
+				afterOpen: 'FreeOverlayAfterOpen',
+				beforeClose: 'FreeOverlayBeforeClose',
+			}}
 			isOpen={isOpen}
 			onRequestClose={closeModal}
 			shouldCloseOnEsc
 			ariaHideApp={false}
+			closeTimeoutMS={220}
 			{...props}
 		>
 			{needCloseButton && (

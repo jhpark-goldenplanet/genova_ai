@@ -15,6 +15,17 @@ const pageFadeIn = keyframes`
 	}
 `;
 
+const thumbnailModalFadeSlideIn = keyframes`
+	from {
+		opacity: 0;
+		transform: translateY(${unit(18)});
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+`;
+
 export const Main = styled.main`
 	animation: ${pageFadeIn} 0.35s ease;
 `;
@@ -206,15 +217,20 @@ export const ButtonContainer = styled.section`
 `;
 
 export const AddThumbnailContainer = styled.article`
-	padding: ${unit(40)};
+	width: min(${unit(560)}, calc(100vw - ${unit(32)}));
+	border-radius: ${unit(14)};
+	background: white;
+	border: 1px solid rgba(222, 229, 237, 1);
+	padding: ${unit(24)};
+	animation: ${thumbnailModalFadeSlideIn} 0.22s ease forwards;
 
 	h3 {
-		font-size: ${unit(18)};
-		line-height: ${unit(28)};
-		font-weight: 600;
-		color: rgba(19, 19, 20, 1);
+		font-size: ${unit(22)};
+		line-height: ${unit(32)};
+		font-weight: 700;
+		color: rgba(26, 43, 89, 0.95);
 
-		margin-bottom: ${unit(30)};
+		margin-bottom: ${unit(18)};
 
 		text-align: center;
 	}
@@ -230,13 +246,14 @@ export const DragAndDropWrapper = styled.form<DragAndDropWrapperProps>`
 	align-items: center;
 	justify-content: center;
 
-	width: ${unit(340)};
+	width: 100%;
+	max-width: ${unit(460)};
 	height: ${unit(214)};
 	border-radius: ${unit(8)};
 
 	border: 1.5px dashed rgba(75, 137, 212, 1);
 	background-color: ${(props) => (props.isDragActive ? 'rgba(75, 137, 212, 0.1)' : 'white')};
-	margin-bottom: ${unit(30)};
+	margin: 0 auto ${unit(18)};
 
 	h5 {
 		font-size: ${unit(18)};
@@ -277,11 +294,12 @@ export const UploadButton = styled.label`
 
 export const LinkInsertButtonWrapper = styled.div`
 	display: flex;
-	justify-content: center;
-	gap: ${unit(10)};
+	justify-content: flex-end;
+	gap: ${unit(8)};
 
 	button {
-		width: ${unit(88)};
+		min-width: ${unit(84)};
+		padding: 0 ${unit(14)};
 		height: ${unit(40)};
 		border-radius: ${unit(8)};
 
@@ -289,7 +307,7 @@ export const LinkInsertButtonWrapper = styled.div`
 		align-items: center;
 		justify-content: center;
 
-		font-size: ${unit(16)};
+		font-size: ${unit(14)};
 		font-weight: 700;
 		letter-spacing: -0.4%;
 
