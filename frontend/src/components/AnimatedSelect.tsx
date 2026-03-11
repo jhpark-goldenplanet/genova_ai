@@ -14,11 +14,20 @@ interface AnimatedSelectProps {
 	options: SelectOption[];
 	onChange: (nextValue: string) => void;
 	width?: string;
+	placeholder?: string;
+	disabled?: boolean;
 }
 
 const CLOSE_ANIMATION_MS = 200;
 
-export default function AnimatedSelect({ value, options, onChange, width = unit(96) }: AnimatedSelectProps) {
+export default function AnimatedSelect({
+	value,
+	options,
+	onChange,
+	width = unit(96),
+	placeholder,
+	disabled = false,
+}: AnimatedSelectProps) {
 	const rootRef = useRef<HTMLDivElement>(null);
 	const [isOpen, setIsOpen] = useState(false);
 	const [isClosing, setIsClosing] = useState(false);
@@ -27,6 +36,7 @@ export default function AnimatedSelect({ value, options, onChange, width = unit(
 	const selected = useMemo(() => {
 		return options.find((option) => option.value === value) ?? options[0];
 	}, [options, value]);
+	const displayLabel = value ? selected?.label ?? '' : placeholder ?? selected?.label ?? '';
 
 	useEffect(() => {
 		return () => {
@@ -47,6 +57,7 @@ export default function AnimatedSelect({ value, options, onChange, width = unit(
 	}, []);
 
 	const handleOpen = () => {
+		if (disabled) return;
 		if (closeTimerRef.current) {
 			clearTimeout(closeTimerRef.current);
 		}
@@ -75,17 +86,18 @@ export default function AnimatedSelect({ value, options, onChange, width = unit(
 	};
 
 	const handleSelect = (nextValue: string) => {
+		if (disabled) return;
 		onChange(nextValue);
 		handleClose();
 	};
 
 	return (
 		<Root ref={rootRef} style={{ width }}>
-			<Trigger type="button" onClick={handleToggle} aria-expanded={isOpen && !isClosing}>
-				<span>{selected?.label ?? ''}</span>
+			<Trigger type="button" onClick={handleToggle} aria-expanded={isOpen && !isClosing} disabled={disabled}>
+				<TriggerText $placeholder={!value}>{displayLabel}</TriggerText>
 				<Caret $open={isOpen && !isClosing}>▾</Caret>
 			</Trigger>
-			{isOpen ? (
+			{isOpen && !disabled ? (
 				<Panel $closing={isClosing}>
 					{options.map((option) => (
 						<OptionItem key={option.value}>
@@ -127,11 +139,27 @@ const Trigger = styled.button`
 		border-color: rgba(152, 174, 210, 1);
 	}
 
+	&:disabled {
+		background: rgba(221, 227, 238, 1) !important;
+		color: rgba(112, 121, 138, 1) !important;
+		border-color: rgba(170, 181, 203, 1) !important;
+		cursor: default;
+	}
+
+	&:disabled:hover {
+		background: rgba(221, 227, 238, 1) !important;
+		border-color: rgba(170, 181, 203, 1) !important;
+	}
+
 	&:focus-visible {
 		outline: none;
 		border-color: rgba(75, 137, 212, 1);
 		box-shadow: 0 0 0 3px rgba(75, 137, 212, 0.15);
 	}
+`;
+
+const TriggerText = styled.span<{ $placeholder: boolean }>`
+	color: ${({ $placeholder }) => ($placeholder ? 'rgba(108, 122, 150, 1)' : 'inherit')};
 `;
 
 const Caret = styled.span<{ $open: boolean }>`

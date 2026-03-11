@@ -1,23 +1,27 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import LoginPage from '@/components/auth/LoginPage';
 import Loader from '@/components/Loader';
-import UploadContent from './components/UploadContent';
 
-export default function Upload() {
+export default function RootEntryPage() {
 	const { user, loading } = useAuth();
+	const router = useRouter();
 
-	// 로딩 중이면 로딩 화면 표시
+	useEffect(() => {
+		if (loading || !user) return;
+		router.replace('/workspace');
+	}, [loading, user, router]);
+
 	if (loading) {
 		return <Loader isLoading={true} isFetching={true} />;
 	}
 
-	// 로그인하지 않았으면 로그인 페이지 표시
 	if (!user) {
 		return <LoginPage />;
 	}
 
-	// 로그인한 경우 업로드 페이지 표시
-	return <UploadContent />;
+	return <Loader isLoading={true} isFetching={true} />;
 }

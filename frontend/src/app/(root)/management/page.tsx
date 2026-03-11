@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function LegacyMembersPage() {
+export default function ManagementIndexPage() {
 	const router = useRouter();
 
 	useEffect(() => {

@@ -72,6 +72,20 @@ const globalStyles = css`
 			z-index: 1000;
 		}
 
+		.OverlayBase {
+			opacity: 0;
+		}
+
+		.OverlayAfterOpen {
+			opacity: 1;
+			transition: opacity 0.22s ease;
+		}
+
+		.OverlayBeforeClose {
+			opacity: 0;
+			transition: opacity 0.22s ease;
+		}
+
 		.FreeOverlay {
 			z-index: 900;
 		}
@@ -121,6 +135,23 @@ const globalStyles = css`
 				border-radius: ${munit(8)};
 				box-shadow: 0 0 ${munit(30)} 0 rgba(0, 0, 0, 0.05);
 			}
+		}
+
+		.ModalBase {
+			opacity: 0;
+			transform: translateY(${unit(18)}) scale(0.985);
+		}
+
+		.ModalAfterOpen {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+			transition: opacity 0.22s ease, transform 0.22s ease;
+		}
+
+		.ModalBeforeClose {
+			opacity: 0;
+			transform: translateY(${unit(18)}) scale(0.985);
+			transition: opacity 0.22s ease, transform 0.22s ease;
 		}
 
 		.FreeModal {
@@ -188,6 +219,13 @@ const globalStyles = css`
 		appearance: none;
 		-webkit-border-radius: 0;
 		border-radius: 0;
+	}
+
+	input:not([type='radio']):focus,
+	textarea:focus,
+	select:focus {
+		border-color: rgba(84, 121, 190, 1);
+		box-shadow: 0 0 0 ${unit(3)} rgba(84, 121, 190, 0.18);
 	}
 
 	input:not([type='radio']),
@@ -288,9 +326,6 @@ const globalStyles = css`
 		&:hover {
 			cursor: unset;
 		}
-	}
-	button:not(:disabled):active {
-		transform: scale(0.98);
 	}
 
 	input:-webkit-autofill,

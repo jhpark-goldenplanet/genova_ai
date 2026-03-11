@@ -64,8 +64,16 @@ const AlertModal: ForwardRefRenderFunction<IModal, Props> = (
 
 	return (
 		<Modal
-			className="Modal"
-			overlayClassName="Overlay"
+			className={{
+				base: 'Modal ModalBase',
+				afterOpen: 'ModalAfterOpen',
+				beforeClose: 'ModalBeforeClose',
+			}}
+			overlayClassName={{
+				base: 'Overlay OverlayBase',
+				afterOpen: 'OverlayAfterOpen',
+				beforeClose: 'OverlayBeforeClose',
+			}}
 			isOpen={isOpen}
 			onRequestClose={closeModal}
 			style={containerStyle}
@@ -74,6 +82,7 @@ const AlertModal: ForwardRefRenderFunction<IModal, Props> = (
 				onAfterClose?.();
 			}}
 			ariaHideApp={false}
+			closeTimeoutMS={220}
 		>
 			<CommonAlert message={message} type={type} buttonHandler={onClickButton} />
 		</Modal>

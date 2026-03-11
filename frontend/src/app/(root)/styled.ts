@@ -559,32 +559,58 @@ export const SideNavFooter = styled.div`
 	padding-top: ${unit(16)};
 	border-top: 1px solid rgba(255, 255, 255, 0.16);
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
+	align-items: center;
 	gap: ${unit(10)};
 `;
 
 export const SideNavUser = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(2)};
+	flex: 1;
+	min-width: 0;
+`;
+
+export const SideNavUserName = styled.div`
 	color: rgba(249, 250, 251, 1);
 	font-size: ${unit(13)};
-	font-weight: 500;
-	word-break: break-all;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	line-height: 1.4;
 `;
 
-export const SideNavButton = styled.button`
-	padding: ${unit(7)} ${unit(10)};
-	border-radius: ${unit(7)};
-	border: 1px solid rgba(255, 255, 255, 0.35);
-	background: transparent;
-	color: white;
-	font-size: ${unit(13)};
-	font-weight: 600;
+export const SideNavUserPlan = styled.div`
+	color: rgba(198, 210, 233, 0.82);
+	font-size: ${unit(11)};
+	font-weight: 500;
+	line-height: 1.35;
+`;
+
+export const SideNavIconButton = styled.button`
+	width: ${unit(34)};
+	height: ${unit(34)};
+	border-radius: ${unit(8)};
+	border: 1px solid rgba(255, 255, 255, 0.24);
+	background: rgba(255, 255, 255, 0.04);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
 	cursor: pointer;
-	transition: background 0.2s ease;
-	width: fit-content;
+	transition: background 0.2s ease, border-color 0.2s ease;
+
+	svg {
+		width: ${unit(17)};
+		height: ${unit(17)};
+		stroke: rgba(249, 250, 251, 1);
+	}
 
 	&:hover {
-		background: rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.38);
 	}
 `;
 
@@ -643,7 +669,7 @@ export const MembersPageBody = styled.div`
 	align-items: stretch;
 	flex-direction: column;
 	gap: ${unit(12)};
-	padding: ${unit(18)} ${unit(40)};
+	padding: ${unit(18)} 0 0;
 `;
 
 export const MembersPlaceholder = styled.section`
@@ -674,6 +700,11 @@ export const MembersTableCard = styled.section`
 	border-radius: ${unit(12)};
 	background: white;
 	overflow: hidden;
+`;
+
+export const MembersTableScroll = styled.div`
+	height: ${unit(548)};
+	overflow-y: auto;
 `;
 
 export const MembersTopActions = styled.div`
@@ -747,6 +778,10 @@ export const MembersTable = styled.table`
 		font-weight: 700;
 		color: rgba(84, 98, 130, 1);
 		border-bottom: 1px solid rgba(236, 241, 247, 1);
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		background: rgba(247, 249, 253, 1);
 	}
 
 	td {

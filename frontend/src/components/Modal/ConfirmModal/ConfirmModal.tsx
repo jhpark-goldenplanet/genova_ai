@@ -57,13 +57,22 @@ const ConfirmModal: ForwardRefRenderFunction<IModal, Props> = (
 
 	return (
 		<Modal
-			className="Modal"
-			overlayClassName="Overlay"
+			className={{
+				base: 'Modal ModalBase',
+				afterOpen: 'ModalAfterOpen',
+				beforeClose: 'ModalBeforeClose',
+			}}
+			overlayClassName={{
+				base: 'Overlay OverlayBase',
+				afterOpen: 'OverlayAfterOpen',
+				beforeClose: 'OverlayBeforeClose',
+			}}
 			isOpen={isOpen}
 			onRequestClose={closeModal}
 			shouldCloseOnEsc
 			style={containerStyle}
 			ariaHideApp={false}
+			closeTimeoutMS={220}
 		>
 			<CommonConfirm message={message} type={type} buttonHandler={[onClickButton, okHandler]} />
 		</Modal>
