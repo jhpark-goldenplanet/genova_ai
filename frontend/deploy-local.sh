@@ -54,6 +54,13 @@ if [ ! -d "node_modules" ]; then
     echo ""
 fi
 
+# Next dev can fail against stale build artifacts after branch/layout changes.
+if [ -d ".next" ]; then
+    echo -e "${YELLOW}Removing stale .next build cache...${NC}"
+    rm -rf .next
+    echo ""
+fi
+
 # Start development server
 echo -e "${GREEN}Starting Next.js development server...${NC}"
 echo ""

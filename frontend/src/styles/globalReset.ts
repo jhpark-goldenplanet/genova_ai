@@ -107,7 +107,6 @@ const globalStyles = css`
 		.Modal {
 			background-color: white;
 			min-width: ${unit(280)};
-			min-height: ${unit(150)};
 			border-radius: ${unit(8)};
 			border: none;
 			inset: 0;
@@ -183,7 +182,7 @@ const globalStyles = css`
 		-ms-overflow-style: none; /* IE and Edge */
 		scrollbar-width: none; /* Firefox */
 		box-sizing: border-box;
-		font-family: 'Pretendard';
+		font-family: inherit;
 		white-space: pre-wrap;
 		margin: 0;
 		padding: 0;

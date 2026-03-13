@@ -44,11 +44,45 @@ start_process() {
   fi
 }
 
+wait_for_http() {
+  local name="$1"
+  local url="$2"
+  local pid_file="$3"
+  local log_file="$4"
+  local attempts="${5:-30}"
+
+  echo "[$name] waiting for HTTP response at $url ..."
+
+  for ((i=1; i<=attempts; i++)); do
+    local pid=""
+    if [[ -f "$pid_file" ]]; then
+      pid="$(cat "$pid_file")"
+    fi
+
+    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+      echo "[$name] process exited during startup. Check log: $log_file"
+      exit 1
+    fi
+
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "[$name] ready"
+      return
+    fi
+
+    sleep 1
+  done
+
+  echo "[$name] did not become ready in time. Check log: $log_file"
+  exit 1
+}
+
 echo "[infra] starting PostgreSQL/Redis..."
 bash "$ROOT_DIR/setup-local-env.sh"
 
 start_process "backend" "$BACKEND_PID_FILE" "$BACKEND_LOG_FILE" "cd '$ROOT_DIR/backend' && ./deploy-local.sh"
+wait_for_http "backend" "http://localhost:8000/docs" "$BACKEND_PID_FILE" "$BACKEND_LOG_FILE"
 start_process "frontend" "$FRONTEND_PID_FILE" "$FRONTEND_LOG_FILE" "cd '$ROOT_DIR/frontend' && ./deploy-local.sh"
+wait_for_http "frontend" "http://localhost:3000" "$FRONTEND_PID_FILE" "$FRONTEND_LOG_FILE"
 
 echo ""
 echo "Done."

@@ -9,10 +9,13 @@ import { useModal } from '@/shared/hooks';
 import Image from 'next/image';
 import ico_edit from '@images/ico_edit.png';
 
+type ProcessStage = 'UPLOAD' | 'CONFIGURE' | 'ANALYZE' | 'DONE';
+
 interface AnalysisItem {
 	id: string;
 	name: string;
 	status: 'COMPLETE' | 'IN_PROGRESS' | 'FAILED';
+	processStage?: ProcessStage;
 	updatedAt: string;
 	promptLabel: string;
 	briefing: string;
@@ -86,16 +89,25 @@ const DEFAULT_WORKS: WorkItem[] = [
 	},
 ];
 
-const statusLabel = (status: AnalysisItem['status']) => {
-	if (status === 'COMPLETE') return '완료';
-	if (status === 'IN_PROGRESS') return '작업 중';
-	return '실패';
+const resolveProcessStage = (analysis: Partial<AnalysisItem>): ProcessStage => {
+	if (analysis.processStage) return analysis.processStage;
+	if (analysis.status === 'COMPLETE') return 'DONE';
+	if (analysis.status === 'IN_PROGRESS') return 'ANALYZE';
+	return 'CONFIGURE';
+};
+
+const processStageLabel = (stage: ProcessStage) => {
+	if (stage === 'UPLOAD') return '업로드 중';
+	if (stage === 'CONFIGURE') return '설정중';
+	if (stage === 'ANALYZE') return '분석중';
+	return '완료';
 };
 
 const normalizeAnalysis = (analysis: Partial<AnalysisItem>, idx: number): AnalysisItem => ({
 	id: analysis.id || `analysis-${idx + 1}`,
 	name: analysis.name || `분석 ${idx + 1}`,
 	status: analysis.status || 'COMPLETE',
+	processStage: resolveProcessStage(analysis),
 	updatedAt: analysis.updatedAt || '',
 	promptLabel: analysis.promptLabel || 'AI 자동',
 	briefing: analysis.briefing || '요약 정보가 없습니다.',
@@ -255,14 +267,32 @@ export default function WorkspacePage() {
 
 	const handleCreateAnalysis = () => {
 		if (!selectedWork) {
-			router.push('/workspace/new');
+			router.push('/workspace/new?mode=project');
 			return;
 		}
 		if ((selectedWork.analyses?.length ?? 0) >= MAX_ANALYSIS_COUNT) {
 			warningToast('작업은 최대 5개까지 등록할 수 있습니다.');
 			return;
 		}
-		router.push('/workspace/new');
+		router.push(`/workspace/new?mode=analysis&workId=${selectedWork.id}`);
+	};
+
+	const handleEditAnalysis = () => {
+		if (!selectedWork) {
+			router.push('/workspace/new?mode=project');
+			return;
+		}
+		const query = selectedAnalysis ? `&analysisId=${selectedAnalysis.id}` : '';
+		router.push(`/workspace/new?mode=analysis&workId=${selectedWork.id}${query}`);
+	};
+
+	const handleOpenResult = () => {
+		if (!selectedWork?.videoId) {
+			router.push('/workspace/new?mode=project');
+			return;
+		}
+		const query = selectedAnalysis ? `?analysisId=${selectedAnalysis.id}` : '';
+		router.push(`/video/${selectedWork.videoId}/summary${query}`);
 	};
 
 	return (
@@ -272,7 +302,7 @@ export default function WorkspacePage() {
 					<Title>프로젝트 목록</Title>
 					<Description>프로젝트를 선택하면 원본 영상과 작업 목록을 확인할 수 있습니다.</Description>
 				</div>
-				<ActionButton type="button" onClick={() => router.push('/workspace/new')}>
+				<ActionButton type="button" onClick={() => router.push('/workspace/new?mode=project')}>
 					새 프로젝트
 				</ActionButton>
 			</HeaderRow>
@@ -339,7 +369,12 @@ export default function WorkspacePage() {
 													<AnalysisItemCard key={analysis.id} $selected={isSelected} onClick={() => setSelectedAnalysisId(analysis.id)}>
 														<AnalysisTopRow>
 															<AnalysisTitleMain>
-																<strong>{analysis.name}</strong>
+																<AnalysisTitleRow>
+																	<strong>{analysis.name}</strong>
+																	<StatusTag $stage={analysis.processStage ?? 'DONE'}>
+																		{processStageLabel(analysis.processStage ?? 'DONE')}
+																	</StatusTag>
+																</AnalysisTitleRow>
 															</AnalysisTitleMain>
 															<AnalysisActions>
 																<IconButton
@@ -368,7 +403,6 @@ export default function WorkspacePage() {
 														<AnalysisBottomRow>
 															<AnalysisSubTitle>{analysis.promptLabel}</AnalysisSubTitle>
 															<StatusMetaRow>
-																<StatusTag $status={analysis.status}>{statusLabel(analysis.status)}</StatusTag>
 																<small>{analysis.updatedAt}</small>
 															</StatusMetaRow>
 														</AnalysisBottomRow>
@@ -403,18 +437,14 @@ export default function WorkspacePage() {
 							) : null}
 
 							<BottomActions>
+								<SecondaryButton type="button" onClick={handleEditAnalysis}>
+									작업 수정
+								</SecondaryButton>
 								<PrimaryButton
 									type="button"
-									onClick={() => {
-										if (!selectedWork.videoId) {
-											router.push('/workspace/new');
-											return;
-										}
-										const query = selectedAnalysis ? `?analysisId=${selectedAnalysis.id}` : '';
-										router.push(`/video/${selectedWork.videoId}/summary${query}`);
-									}}
+									onClick={handleOpenResult}
 								>
-									상세 보기
+									분석 결과
 								</PrimaryButton>
 							</BottomActions>
 						</>
@@ -456,10 +486,10 @@ export default function WorkspacePage() {
 }
 
 const Page = styled.main`
-	padding: ${unit(24)} ${unit(26)};
+	padding: ${unit(28)} ${unit(30)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(14)};
+	gap: ${unit(18)};
 `;
 
 const HeaderRow = styled.header`
@@ -470,14 +500,14 @@ const HeaderRow = styled.header`
 `;
 
 const Title = styled.h1`
-	font-size: ${unit(24)};
+	font-size: ${unit(27)};
 	font-weight: 700;
 	color: rgba(23, 36, 62, 1);
 `;
 
 const Description = styled.p`
-	margin-top: ${unit(4)};
-	font-size: ${unit(13)};
+	margin-top: ${unit(6)};
+	font-size: ${unit(15)};
 	color: rgba(83, 95, 120, 1);
 `;
 
@@ -485,9 +515,10 @@ const ActionButton = styled.button`
 	border: none;
 	background: rgba(41, 85, 168, 1);
 	color: white;
-	padding: ${unit(9)} ${unit(14)};
-	border-radius: ${unit(8)};
-	font-weight: 600;
+	padding: ${unit(11)} ${unit(18)};
+	border-radius: ${unit(10)};
+	font-size: ${unit(15)};
+	font-weight: 700;
 	cursor: pointer;
 	transition: background-color 0.2s ease, box-shadow 0.2s ease;
 
@@ -499,27 +530,27 @@ const ActionButton = styled.button`
 
 const BodyGrid = styled.section`
 	display: grid;
-	grid-template-columns: ${unit(320)} 1fr;
-	gap: ${unit(12)};
+	grid-template-columns: ${unit(292)} 1fr;
+	gap: ${unit(16)};
 	min-height: calc(100dvh - ${unit(136)});
 `;
 
 const CardList = styled.div`
 	background: rgba(244, 247, 252, 1);
 	border: 1px solid rgba(223, 230, 240, 1);
-	border-radius: ${unit(12)};
-	padding: ${unit(10)};
+	border-radius: ${unit(14)};
+	padding: ${unit(12)};
 	overflow: auto;
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(8)};
+	gap: ${unit(10)};
 `;
 
 const ProjectCard = styled.article<{ $active: boolean }>`
 	border: ${({ $active }) => ($active ? `${unit(2)} solid rgba(67, 109, 186, 1)` : '1px solid rgba(219, 226, 238, 1)')};
-	border-radius: ${unit(10)};
+	border-radius: ${unit(12)};
 	background: white;
-	padding: ${unit(8)};
+	padding: ${unit(10)};
 	transition: border-color 0.2s ease;
 	box-sizing: border-box;
 
@@ -532,14 +563,14 @@ const ProjectCard = styled.article<{ $active: boolean }>`
 	}
 
 	h3 {
-		font-size: ${unit(15)};
+		font-size: ${unit(17)};
 		font-weight: 700;
 		color: rgba(27, 45, 80, 1);
 	}
 
 	p {
-		margin-top: ${unit(4)};
-		font-size: ${unit(13)};
+		margin-top: ${unit(5)};
+		font-size: ${unit(14)};
 		color: rgba(88, 102, 128, 1);
 	}
 `;
@@ -572,14 +603,14 @@ const CardMainButton = styled.button`
 	}
 
 	h3 {
-		font-size: ${unit(15)};
+		font-size: ${unit(17)};
 		font-weight: 700;
 		color: rgba(27, 45, 80, 1);
 	}
 
 	p {
-		margin-top: ${unit(4)};
-		font-size: ${unit(13)};
+		margin-top: ${unit(5)};
+		font-size: ${unit(14)};
 		color: rgba(88, 102, 128, 1);
 	}
 `;
@@ -587,10 +618,10 @@ const CardMainButton = styled.button`
 const ThumbWrap = styled.div`
 	width: 100%;
 	aspect-ratio: 16 / 9;
-	border-radius: ${unit(8)};
+	border-radius: ${unit(10)};
 	overflow: hidden;
 	background: rgba(231, 237, 248, 1);
-	margin-bottom: ${unit(8)};
+	margin-bottom: ${unit(10)};
 
 	img {
 		display: block;
@@ -606,27 +637,27 @@ const ThumbPlaceholder = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: ${unit(11)};
+	font-size: ${unit(12)};
 	font-weight: 700;
 	color: rgba(89, 104, 128, 1);
 `;
 
 const CardMeta = styled.div`
-	margin-top: ${unit(6)};
+	margin-top: ${unit(8)};
 	display: flex;
-	gap: ${unit(7)};
-	font-size: ${unit(11)};
+	gap: ${unit(8)};
+	font-size: ${unit(12)};
 	color: rgba(111, 126, 153, 1);
 `;
 
 const PreviewPanel = styled.section`
 	background: white;
 	border: 1px solid rgba(223, 230, 240, 1);
-	border-radius: ${unit(12)};
-	padding: ${unit(14)};
+	border-radius: ${unit(14)};
+	padding: ${unit(18)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(10)};
+	gap: ${unit(14)};
 `;
 
 const TitleRow = styled.div`
@@ -636,7 +667,7 @@ const TitleRow = styled.div`
 	flex-wrap: wrap;
 
 	h2 {
-		font-size: ${unit(20)};
+		font-size: ${unit(24)};
 		font-weight: 700;
 		color: rgba(27, 45, 80, 1);
 	}
@@ -649,23 +680,26 @@ const TitleActionGroup = styled.div`
 `;
 
 const SubText = styled.p`
-	font-size: ${unit(12)};
+	font-size: ${unit(14)};
 	color: rgba(88, 102, 128, 1);
 `;
 
 const TopContent = styled.section`
 	display: grid;
-	grid-template-columns: 1.45fr 1fr;
-	gap: ${unit(10)};
+	grid-template-columns: minmax(0, 1.62fr) minmax(${unit(390)}, ${unit(485)});
+	gap: ${unit(14)};
 	align-items: stretch;
+	min-width: 0;
 `;
 
 const VideoPane = styled.div`
-	border-radius: ${unit(10)};
+	border-radius: ${unit(12)};
 	overflow: hidden;
 	background: rgba(13, 20, 34, 1);
 	aspect-ratio: 16 / 9;
-	min-height: ${unit(220)};
+	width: 100%;
+	min-height: ${unit(360)};
+	min-width: 0;
 
 	video {
 		width: 100%;
@@ -678,13 +712,17 @@ const VideoPane = styled.div`
 
 const AnalysisPane = styled.div`
 	border: 1px solid rgba(226, 233, 244, 1);
-	border-radius: ${unit(10)};
-	padding: ${unit(10)};
+	border-radius: ${unit(12)};
+	padding: ${unit(12)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(8)};
+	gap: ${unit(10)};
+	width: 100%;
+	box-sizing: border-box;
 	height: 100%;
 	overflow: hidden;
+	min-width: 0;
+	min-height: 0;
 `;
 
 const AnalysisPanelGroup = styled.section`
@@ -692,14 +730,20 @@ const AnalysisPanelGroup = styled.section`
 	display: flex;
 	flex-direction: column;
 	gap: 0;
+	width: 100%;
+	max-width: ${unit(485)};
+	justify-self: end;
 	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: visible;
 `;
 
 const AnalysisPaneTitle = styled.h3`
 	position: absolute;
-	top: ${unit(-24)};
+	top: ${unit(-28)};
 	right: ${unit(2)};
-	font-size: ${unit(15)};
+	font-size: ${unit(17)};
 	font-weight: 700;
 	color: rgba(26, 43, 89, 1);
 	line-height: 1;
@@ -716,7 +760,7 @@ const EmptyVideo = styled.div`
 `;
 
 const PaneTitle = styled.h3`
-	font-size: ${unit(15)};
+	font-size: ${unit(17)};
 	font-weight: 700;
 	color: rgba(27, 45, 80, 1);
 `;
@@ -724,18 +768,24 @@ const PaneTitle = styled.h3`
 const AnalysisList = styled.ul`
 	display: grid;
 	grid-template-rows: repeat(5, minmax(0, 1fr));
-	gap: ${unit(7)};
+	gap: ${unit(9)};
 	height: 100%;
-	overflow: hidden;
+	overflow: auto;
+	min-height: 0;
 `;
 
 const AnalysisItemCard = styled.li<{ $selected: boolean }>`
 	border: 1px solid ${({ $selected }) => ($selected ? 'rgba(67, 109, 186, 1)' : 'rgba(226, 233, 244, 1)')};
 	background: ${({ $selected }) => ($selected ? 'rgba(240, 246, 255, 1)' : 'white')};
-	border-radius: ${unit(10)};
-	padding: ${unit(10)};
+	border-radius: ${unit(12)};
+	padding: ${unit(14)} ${unit(14)} ${unit(12)};
 	cursor: pointer;
 	transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+	min-height: ${unit(82)};
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	min-width: 0;
 
 	&:hover {
 		border-color: rgba(116, 145, 198, 1);
@@ -746,9 +796,9 @@ const AnalysisItemCard = styled.li<{ $selected: boolean }>`
 const AnalysisEmptyCard = styled.li`
 	border: 1px dashed rgba(173, 189, 216, 1);
 	background: rgba(248, 251, 255, 1);
-	border-radius: ${unit(10)};
-	min-height: ${unit(78)};
-	padding: ${unit(7)} ${unit(8)} ${unit(2)};
+	border-radius: ${unit(12)};
+	min-height: ${unit(82)};
+	padding: ${unit(10)} ${unit(12)} ${unit(8)};
 	transition: background-color 0.2s ease, border-color 0.2s ease;
 
 	&:hover {
@@ -765,13 +815,13 @@ const AnalysisEmptyButton = styled.button`
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: ${unit(6)};
+	gap: ${unit(8)};
 	border: none;
 	background: transparent;
 	cursor: pointer;
 
 	span {
-		font-size: ${unit(13)};
+		font-size: ${unit(14)};
 		font-weight: 700;
 		color: rgba(70, 92, 132, 1);
 	}
@@ -779,8 +829,8 @@ const AnalysisEmptyButton = styled.button`
 `;
 
 const PlusCircle = styled.span`
-	width: ${unit(26)};
-	height: ${unit(26)};
+	width: ${unit(30)};
+	height: ${unit(30)};
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -788,7 +838,7 @@ const PlusCircle = styled.span`
 	border: 1px solid rgba(134, 157, 198, 1);
 	background: white;
 	color: rgba(57, 91, 156, 1);
-	font-size: ${unit(18)};
+	font-size: ${unit(20)};
 	font-weight: 700;
 	line-height: 1;
 `;
@@ -798,18 +848,17 @@ const AnalysisTopRow = styled.div`
 	align-items: center;
 	justify-content: space-between;
 	gap: ${unit(4)};
-	margin-bottom: ${unit(3)};
+	margin-bottom: ${unit(2)};
 `;
 
 const AnalysisTitleMain = styled.div`
 	flex: 1;
 	min-width: 0;
-
 	width: 100%;
 
 	strong {
 		display: block;
-		font-size: ${unit(17)};
+		font-size: ${unit(18)};
 		color: rgba(30, 44, 72, 1);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -817,11 +866,28 @@ const AnalysisTitleMain = styled.div`
 	}
 `;
 
+const AnalysisTitleRow = styled.div`
+	display: flex;
+	align-items: center;
+	gap: ${unit(6)};
+	min-width: 0;
+
+	strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+		flex: 1;
+	}
+`;
+
 const AnalysisBottomRow = styled.div`
 	display: flex;
-	align-items: flex-end;
+	align-items: center;
 	justify-content: space-between;
 	gap: ${unit(6)};
+	margin-top: auto;
+	padding-top: ${unit(10)};
 `;
 
 const AnalysisActions = styled.div`
@@ -833,7 +899,7 @@ const AnalysisActions = styled.div`
 
 const AnalysisSubTitle = styled.small`
 	display: block;
-	font-size: ${unit(14)};
+	font-size: ${unit(15)};
 	color: rgba(102, 117, 141, 1);
 	text-align: left;
 	overflow: hidden;
@@ -846,24 +912,23 @@ const AnalysisSubTitle = styled.small`
 const StatusMetaRow = styled.div`
 	display: flex;
 	align-items: center;
-	gap: ${unit(4)};
 	white-space: nowrap;
 	margin-left: auto;
 	align-self: flex-end;
 
 	small {
-		font-size: ${unit(11)};
+		font-size: ${unit(12)};
 		color: rgba(98, 111, 132, 1);
 		line-height: 1.5;
 	}
 `;
 
 const IconButton = styled.button<{ $danger?: boolean }>`
-	width: ${unit(24)};
-	height: ${unit(24)};
+	width: ${unit(28)};
+	height: ${unit(28)};
 	border: 1px solid ${({ $danger }) => ($danger ? 'rgba(245, 170, 170, 1)' : 'rgba(43, 68, 112, 0.28)')};
 	background: white;
-	border-radius: ${unit(8)};
+	border-radius: ${unit(9)};
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -878,38 +943,56 @@ const IconButton = styled.button<{ $danger?: boolean }>`
 	}
 `;
 
-const StatusTag = styled.span<{ $status: AnalysisItem['status'] }>`
+const StatusTag = styled.span<{ $stage: ProcessStage }>`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: ${unit(3)} ${unit(10)};
+	padding: ${unit(4)} ${unit(11)};
 	border-radius: ${unit(999)};
-	font-size: ${unit(10)};
+	font-size: ${unit(11)};
 	font-weight: 700;
 	white-space: nowrap;
-	background: ${({ $status }) =>
-		$status === 'COMPLETE' ? 'rgba(224, 242, 229, 1)' : $status === 'IN_PROGRESS' ? 'rgba(230, 238, 255, 1)' : 'rgba(255, 232, 232, 1)'};
-	color: ${({ $status }) =>
-		$status === 'COMPLETE' ? 'rgba(25, 117, 60, 1)' : $status === 'IN_PROGRESS' ? 'rgba(42, 76, 149, 1)' : 'rgba(176, 38, 38, 1)'};
+	background: ${({ $stage }) =>
+		$stage === 'DONE'
+			? 'rgba(224, 242, 229, 1)'
+			: $stage === 'ANALYZE'
+				? 'rgba(230, 238, 255, 1)'
+				: $stage === 'CONFIGURE'
+					? 'rgba(255, 242, 223, 1)'
+					: 'rgba(236, 240, 247, 1)'};
+	color: ${({ $stage }) =>
+		$stage === 'DONE'
+			? 'rgba(25, 117, 60, 1)'
+			: $stage === 'ANALYZE'
+				? 'rgba(42, 76, 149, 1)'
+				: $stage === 'CONFIGURE'
+					? 'rgba(156, 91, 18, 1)'
+					: 'rgba(76, 91, 116, 1)'};
 	border: 1px solid
-		${({ $status }) =>
-			$status === 'COMPLETE' ? 'rgba(170, 222, 185, 1)' : $status === 'IN_PROGRESS' ? 'rgba(181, 202, 245, 1)' : 'rgba(247, 181, 181, 1)'};
+		${({ $stage }) =>
+			$stage === 'DONE'
+				? 'rgba(170, 222, 185, 1)'
+				: $stage === 'ANALYZE'
+					? 'rgba(181, 202, 245, 1)'
+					: $stage === 'CONFIGURE'
+						? 'rgba(241, 205, 156, 1)'
+						: 'rgba(205, 214, 227, 1)'};
 `;
 
 const SummarySection = styled.section`
 	border: 1px solid rgba(226, 233, 244, 1);
-	border-radius: ${unit(10)};
-	padding: ${unit(10)};
+	border-radius: ${unit(12)};
+	padding: ${unit(12)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(8)};
+	gap: ${unit(10)};
 `;
 
 const SummaryBox = styled.div`
 	background: rgba(246, 249, 255, 1);
-	border-radius: ${unit(8)};
-	padding: ${unit(10)};
-	font-size: ${unit(13)};
+	border-radius: ${unit(10)};
+	padding: ${unit(12)};
+	font-size: ${unit(15)};
 	color: rgba(45, 60, 90, 1);
 `;
 
@@ -920,10 +1003,10 @@ const KeywordRow = styled.div`
 `;
 
 const Keyword = styled.span`
-	padding: ${unit(4)} ${unit(9)};
-	border-radius: ${unit(14)};
+	padding: ${unit(5)} ${unit(10)};
+	border-radius: ${unit(16)};
 	background: rgba(225, 236, 255, 1);
-	font-size: ${unit(11)};
+	font-size: ${unit(12)};
 	color: rgba(32, 66, 130, 1);
 `;
 
@@ -948,7 +1031,7 @@ const BottomActions = styled.div`
 	margin-top: auto;
 	display: flex;
 	justify-content: flex-end;
-	gap: ${unit(8)};
+	gap: ${unit(10)};
 `;
 
 const InlineButton = styled.button`
@@ -972,8 +1055,9 @@ const PrimaryButton = styled.button`
 	border: none;
 	background: rgba(41, 85, 168, 1);
 	color: white;
-	border-radius: ${unit(8)};
-	padding: ${unit(9)} ${unit(14)};
+	border-radius: ${unit(10)};
+	padding: ${unit(11)} ${unit(16)};
+	font-size: ${unit(15)};
 	font-weight: 700;
 	cursor: pointer;
 	transition: background-color 0.2s ease, box-shadow 0.2s ease;
@@ -981,6 +1065,24 @@ const PrimaryButton = styled.button`
 	&:hover {
 		background: rgba(49, 95, 183, 1);
 		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(41, 85, 168, 0.22);
+	}
+`;
+
+const SecondaryButton = styled.button`
+	border: 1px solid rgba(41, 85, 168, 0.24);
+	background: rgba(241, 246, 255, 1);
+	color: rgba(41, 85, 168, 1);
+	border-radius: ${unit(10)};
+	padding: ${unit(11)} ${unit(16)};
+	font-size: ${unit(15)};
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+
+	&:hover {
+		background: rgba(232, 240, 255, 1);
+		border-color: rgba(41, 85, 168, 0.38);
+		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(41, 85, 168, 0.12);
 	}
 `;
 

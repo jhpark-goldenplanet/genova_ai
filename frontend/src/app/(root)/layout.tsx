@@ -9,11 +9,12 @@ import { useModal } from '@/shared/hooks';
 import { errorToast } from '@/shared/utils/toastUtils';
 import Loader from '@/components/Loader';
 import logo_navy from '@images/logo_navy.png';
-import NicknameModal from './components/NicknameModal';
+import ProfileModal from './components/ProfileModal';
 import * as S from './styled';
 
 const ROUTE_TRANSITION_STORAGE_KEY = 'genova_route_transition_active';
 const ROUTE_TRANSITION_MS = 220;
+const UPLOAD_FLOW_STORAGE_KEY = 'genova_upload_flow_draft_v1';
 
 interface MenuItem {
 	key: string;
@@ -22,9 +23,24 @@ interface MenuItem {
 }
 
 const ROOT_MENUS: MenuItem[] = [
-	{ key: 'workspace', label: '워크스페이스', path: '/workspace' },
+	{ key: 'workspace', label: '워크 스페이스', path: '/workspace' },
 	{ key: 'management', label: '관리', path: '/management/members' },
 	{ key: 'notices', label: '공지사항', path: '/notices' },
+];
+
+const SIDE_FOOTER_LINKS = [
+	{
+		label: '이용약관',
+		href: 'https://shorthaired-fossa-a9f.notion.site/Genova-AI-1d8bbfa86f7b8017a40fee1bef8ede6a?pvs=4',
+	},
+	{
+		label: 'AI 윤리',
+		href: 'https://shorthaired-fossa-a9f.notion.site/Genova-AI-d460f513f14f4f7588cc7e8f3a002f4a?pvs=4',
+	},
+	{
+		label: '도움말',
+		href: 'https://shorthaired-fossa-a9f.notion.site/Genova-AI-1cbbbfa86f7b80faa111d41db87ad129?pvs=4',
+	},
 ];
 
 const WorkspaceMenuIcon = () => (
@@ -98,6 +114,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 	const handleMove = (path: string, menuKey: string) => {
 		if (pathname === path) return;
 
+		if (typeof window !== 'undefined' && pathname.startsWith('/workspace/new') && path !== '/workspace/new') {
+			window.localStorage.removeItem(UPLOAD_FLOW_STORAGE_KEY);
+		}
+
 		flushSync(() => {
 			setPendingMenuKey(menuKey);
 			setPendingPath(path);
@@ -145,10 +165,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 		}
 	};
 
-	const handleOpenNicknameModal = () => {
+	const handleOpenProfileModal = () => {
 		custom({
-			children: <NicknameModal />,
+			children: <ProfileModal />,
 		});
+	};
+
+	const openFooterLink = (href: string) => {
+		window.open(href, '_blank', 'noopener,noreferrer');
 	};
 
 	if (loading) return <Loader isLoading={true} isFetching={true} />;
@@ -181,11 +205,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<S.SideNavSpacer />
 
 				<S.SideNavFooter>
-					<S.SideNavUser>
-						<S.SideNavUserName title={userLabel}>{userLabel}</S.SideNavUserName>
-						<S.SideNavUserPlan>{currentPlanLabel} Plan</S.SideNavUserPlan>
-					</S.SideNavUser>
-					<S.SideNavIconButton type="button" onClick={handleOpenNicknameModal} aria-label="닉네임 설정">
+					<S.SideNavFooterInfo>
+						<S.SideNavUser>
+							<S.SideNavUserName title={userLabel}>{userLabel}</S.SideNavUserName>
+							<S.SideNavUserPlan>{currentPlanLabel} Plan</S.SideNavUserPlan>
+						</S.SideNavUser>
+						<S.SideNavMeta>
+							<S.SideNavMetaCopy>© 2025 GOLDEN PLANET All rights reserved</S.SideNavMetaCopy>
+							<S.SideNavMetaLinks>
+								{SIDE_FOOTER_LINKS.map((link) => (
+									<S.SideNavMetaLink key={link.label} type="button" onClick={() => openFooterLink(link.href)}>
+										{link.label}
+									</S.SideNavMetaLink>
+								))}
+							</S.SideNavMetaLinks>
+						</S.SideNavMeta>
+					</S.SideNavFooterInfo>
+					<S.SideNavIconButton type="button" onClick={handleOpenProfileModal} aria-label="프로필 설정">
 						<SettingsMenuIcon />
 					</S.SideNavIconButton>
 					<S.SideNavIconButton type="button" onClick={handleLogout} aria-label="로그아웃">

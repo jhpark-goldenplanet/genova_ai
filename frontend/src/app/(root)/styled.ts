@@ -555,20 +555,67 @@ export const SideNavSpacer = styled.div`
 	flex: 1;
 `;
 
+export const SideNavFooterInfo = styled.div`
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(10)};
+`;
+
+export const SideNavMeta = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(4)};
+`;
+
+export const SideNavMetaCopy = styled.p`
+	font-size: ${unit(9.5)};
+	line-height: 1.35;
+	color: rgba(194, 205, 227, 0.72);
+	white-space: nowrap;
+`;
+
+export const SideNavMetaLinks = styled.div`
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: ${unit(6)};
+	flex-wrap: nowrap;
+`;
+
+export const SideNavMetaLink = styled.button`
+	border: none;
+	background: transparent;
+	padding: 0;
+	font-size: ${unit(10)};
+	line-height: 1.4;
+	color: rgba(233, 239, 249, 0.82);
+	cursor: pointer;
+	text-align: left;
+	white-space: nowrap;
+	transition: color 0.2s ease, opacity 0.2s ease;
+
+	&:hover {
+		color: rgba(255, 255, 255, 1);
+		opacity: 1;
+	}
+`;
+
 export const SideNavFooter = styled.div`
+	margin-top: ${unit(18)};
 	padding-top: ${unit(16)};
 	border-top: 1px solid rgba(255, 255, 255, 0.16);
 	display: flex;
 	flex-direction: row;
-	align-items: center;
+	align-items: flex-start;
 	gap: ${unit(10)};
 `;
 
 export const SideNavUser = styled.div`
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(2)};
-	flex: 1;
+	gap: ${unit(1)};
 	min-width: 0;
 `;
 

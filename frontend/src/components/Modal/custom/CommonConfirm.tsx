@@ -1,7 +1,6 @@
 import * as S from './styled';
 import React, { FC } from 'react';
 import { StringKeyAndVal } from '@/typings/base';
-import { Colors } from '@/styles/globalStyles';
 
 interface Props {
 	message: string;
@@ -16,15 +15,6 @@ export const modalIcon: StringKeyAndVal = {
 	info: 'modal_success.webp',
 	question: 'modal_warning.webp',
 	none: '',
-};
-
-const buttonStyle: { [key: string]: any } = {
-	success: [{ backgroundColor: Colors.primary }, {}],
-	error: [{ backgroundColor: Colors.danger }, {}],
-	warning: [{ backgroundColor: Colors.warning }, {}],
-	info: [{ backgroundColor: Colors.primary }, {}],
-	question: [{ backgroundColor: Colors.primary }, {}],
-	green: [{}, {}],
 };
 
 const CommonConfirm: FC<Props> = ({ message, type = 'error', buttonHandler }) => {
@@ -65,21 +55,12 @@ const CommonConfirm: FC<Props> = ({ message, type = 'error', buttonHandler }) =>
 				{[0, 1].map((i) => (
 					<button
 						key={i}
+						className={i === 0 ? 'secondary' : 'primary'}
 						type="button"
 						onClick={() => {
 							if (i === 0) buttonHandler[0]();
 							else buttonHandler[1]();
 						}}
-						style={
-							i === 0
-								? {
-										backgroundColor: 'white',
-										border: '1px solid rgba(185, 194, 205, 1)',
-										color: 'rgba(114, 115, 126, 1)',
-									}
-								: { backgroundColor: 'rgba(26, 43, 89, 1)' }
-						}
-						// style={buttonStyle[type][i]}
 					>
 						{buttons[i]}
 					</button>

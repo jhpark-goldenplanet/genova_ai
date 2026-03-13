@@ -74,7 +74,7 @@ export default function SettingsPage() {
 		if (!selectedWork.analyses.length) {
 			setSelectedAnalysisId('');
 			setMode('AUTO');
-			setPresetName('기본 프리셋');
+			setPresetName('기본 요약');
 			setPrompt('핵심 정책 이슈와 실행 포인트를 우선 요약해 주세요.');
 			setSplitCount(5);
 			return;
@@ -86,7 +86,7 @@ export default function SettingsPage() {
 	useEffect(() => {
 		if (!selectedAnalysis) return;
 		setMode(selectedAnalysis.mode ?? (selectedAnalysis.promptLabel === 'AI 자동' ? 'AUTO' : 'CUSTOM'));
-		setPresetName(selectedAnalysis.promptLabel || '기본 프리셋');
+		setPresetName(selectedAnalysis.promptLabel || '기본 요약');
 		setPrompt(selectedAnalysis.promptText || '핵심 정책 이슈와 실행 포인트를 우선 요약해 주세요.');
 		setSplitCount(selectedAnalysis.splitCount || 5);
 	}, [selectedAnalysis]);

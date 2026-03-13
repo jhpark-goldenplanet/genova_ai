@@ -1,11 +1,15 @@
-import { Inter } from 'next/font/google';
+import { Noto_Sans_KR } from 'next/font/google';
 import RootLayoutClient from './RootLayout.client';
 import 'react-toastify/dist/ReactToastify.css';
 import 'react-loading-skeleton/dist/skeleton.css';
 import './custom_video_marker.css';
 import { Metadata } from 'next';
 
-const inter = Inter({ subsets: ['latin'] });
+const notoSansKr = Noto_Sans_KR({
+	subsets: ['latin'],
+	weight: ['400', '500', '600', '700', '800'],
+	display: 'swap',
+});
 
 export const viewport = {
 	width: 'device-width',
@@ -23,16 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
 	return (
 		<html lang="ko">
-			<head>
-				<link
-					rel="stylesheet"
-					as="style"
-					crossOrigin="anonymous"
-					href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.6/dist/web/static/pretendard-dynamic-subset.css"
-				/>
-			</head>
-
-			<body className={inter.className} suppressHydrationWarning>
+			<body className={notoSansKr.className} suppressHydrationWarning>
 				<RootLayoutClient>{children}</RootLayoutClient>
 			</body>
 		</html>

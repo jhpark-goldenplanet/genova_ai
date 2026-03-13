@@ -102,7 +102,7 @@ export default function LoginPage() {
 			</S.Main>
 
 			<S.Footer>
-				<p className="copyright">© 2025 GOLDEN PLANET Co.,Ltd. All rights reserved.</p>
+				<p className="copyright">© 2025 GOLDEN PLANET All rights reserved</p>
 				<S.TermsRow>
 					<button
 						type="button"
