@@ -8,14 +8,16 @@ import { FileRejection, useDropzone } from 'react-dropzone';
 import { isEmpty, uniqBy } from 'lodash-es';
 import { SubmitHandler, useForm } from 'react-hook-form';
 import { ACCEPTED_VIDEO_TYPES, validateFileTypes } from '../helper';
-import { getUploadUrl, uploadToGCS, confirmUpload } from '@/shared/apis/video';
+import { getUploadUrl, uploadToGCS, confirmUpload, analyzeVideo } from '@/shared/apis/video';
 import Loader from '@/components/Loader';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from '@emotion/styled';
 import { keyframes } from '@emotion/react';
 import { unit } from '@/shared/utils/base';
 import { NAVBAR_WIDTH } from '@/shared/constants';
 import AnimatedSelect from '@/components/AnimatedSelect';
+import { Id, toast } from 'react-toastify';
+import { useGetStatusProgressSummary } from '@/shared/hooks/queries/video';
 
 type AnalysisMode = 'AUTO' | 'CUSTOM';
 type FlowStep = 'UPLOAD' | 'CONFIGURE' | 'READY' | 'DONE';
@@ -26,6 +28,14 @@ const processStageToFlowStep = (stage: ProcessStage): FlowStep => {
 	if (stage === 'CONFIGURE') return 'CONFIGURE';
 	if (stage === 'ANALYZE') return 'READY';
 	return 'DONE';
+};
+
+const ANALYSIS_STEP_LABELS: Record<string, string> = {
+	UPLOADING: '업로드 확인',
+	UPLOADING_TO_GCS: '스토리지 업로드',
+	SUMMARIZATION: '요약 생성',
+	TRANSCRIBE: '스크립트 생성',
+	FINALIZING: '결과 정리',
 };
 
 interface WorkspaceAnalysisItem {
@@ -86,13 +96,15 @@ interface WorkDraftPayload {
 	source: string;
 	duration: string;
 	title: string;
+	videoUrl?: string;
+	thumbnailUrl?: string;
 }
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_FILE_LENGTH = 1;
 const MIN_VIDEO_DURATION = 60; // 1분
 const MAX_VIDEO_DURATION = 2700; // 45분
-const DEV_SKIP_UPLOAD_FLOW = true;
+const DEV_SKIP_UPLOAD_FLOW = process.env.NEXT_PUBLIC_DEV_SKIP_UPLOAD_FLOW === 'true';
 const LAST_VIDEO_ID_KEY = 'genova_active_video_id';
 const WORKSPACE_STORAGE_KEY = 'genova_workspace_mock_works_v1';
 const PROMPT_PRESET_STORAGE_KEY = 'genova_prompt_tag_presets_v1';
@@ -176,6 +188,7 @@ export default function UploadContent() {
 	const [durationLabel, setDurationLabel] = useState('-');
 	const [selectedTags, setSelectedTags] = useState<string[]>([]);
 	const [uploadedVideo, setUploadedVideo] = useState<UploadedVideoState | null>(null);
+	const [uploadedVideoPreviewUrl, setUploadedVideoPreviewUrl] = useState('');
 	const [projectName, setProjectName] = useState('');
 	const [projectNameDraft, setProjectNameDraft] = useState('');
 	const [analysisName, setAnalysisName] = useState('');
@@ -189,6 +202,8 @@ export default function UploadContent() {
 	const [hoveredStep, setHoveredStep] = useState<FlowStep | null>(null);
 	const [isRestartConfirmOpen, setIsRestartConfirmOpen] = useState(false);
 	const [isRestartConfirmClosing, setIsRestartConfirmClosing] = useState(false);
+	const autoAdvanceTimerRef = useRef<number | null>(null);
+	const autoAdvanceToastIdRef = useRef<Id | null>(null);
 
 	const { register, handleSubmit, setValue, watch } = useForm<IFormValues>();
 
@@ -196,9 +211,16 @@ export default function UploadContent() {
 	const entryMode = searchParams.get('mode') ?? 'project';
 	const entryWorkId = searchParams.get('workId');
 	const entryAnalysisId = searchParams.get('analysisId');
+	const analysisStatusVideoId = flowStep === 'READY' || flowStep === 'DONE' ? uploadedVideo?.videoId : undefined;
+	const { data: analysisStatusResult } = useGetStatusProgressSummary(analysisStatusVideoId);
+	const analysisProgress = analysisStatusResult?.progress ?? 0;
+	const analysisStatus = analysisStatusResult?.status;
+	const analysisStepLabel = analysisStatusResult?.step ? ANALYSIS_STEP_LABELS[analysisStatusResult.step] ?? analysisStatusResult.step : '분석 준비';
+	const isAnalysisFailed = analysisStatus === 'FAILED' || analysisStatus === 'CANCELED' || analysisStatus === 'INVALID_VIDEO_ID';
+	const analysisStatusLabel = analysisStatus ?? 'PENDING';
 
 	const handleProceedWithExistingWorkCheck = (next: () => void) => {
-		if (!hasExistingWork) {
+		if (entryMode === 'project' || !hasExistingWork) {
 			next();
 			return;
 		}
@@ -316,6 +338,38 @@ export default function UploadContent() {
 	}, [entryMode, entryWorkId, entryAnalysisId]);
 
 	useEffect(() => {
+		return () => {
+			if (uploadedVideoPreviewUrl) {
+				window.URL.revokeObjectURL(uploadedVideoPreviewUrl);
+			}
+		};
+	}, [uploadedVideoPreviewUrl]);
+
+	useEffect(() => {
+		return () => {
+			if (autoAdvanceTimerRef.current) {
+				window.clearTimeout(autoAdvanceTimerRef.current);
+			}
+			if (autoAdvanceToastIdRef.current) {
+				toast.dismiss(autoAdvanceToastIdRef.current);
+			}
+		};
+	}, []);
+
+	useEffect(() => {
+		if (flowStep === 'UPLOAD') return;
+
+		if (autoAdvanceTimerRef.current) {
+			window.clearTimeout(autoAdvanceTimerRef.current);
+			autoAdvanceTimerRef.current = null;
+		}
+		if (autoAdvanceToastIdRef.current) {
+			toast.dismiss(autoAdvanceToastIdRef.current);
+			autoAdvanceToastIdRef.current = null;
+		}
+	}, [flowStep]);
+
+	useEffect(() => {
 		if (typeof window === 'undefined') return;
 		const payload = {
 			flowStep,
@@ -332,6 +386,22 @@ export default function UploadContent() {
 		};
 		window.localStorage.setItem(UPLOAD_FLOW_STORAGE_KEY, JSON.stringify(payload));
 	}, [flowStep, viewStep, analysisMode, presetName, splitCountValue, durationLabel, projectName, analysisName, selectedTags, uploadedVideo, createdAnalysisId]);
+
+	useEffect(() => {
+		if (flowStep !== 'READY') return;
+		if (analysisStatus !== 'COMPLETE') return;
+
+		if (uploadedVideo && createdAnalysisId) {
+			updateAnalysisStage(uploadedVideo.videoId, createdAnalysisId, {
+				status: 'COMPLETE',
+				processStage: 'DONE',
+				briefing: '분석이 완료되었습니다. 결과 화면에서 상세 내용을 확인할 수 있습니다.',
+			});
+		}
+
+		setFlowStep('DONE');
+		setViewStep('DONE');
+	}, [flowStep, analysisStatus, uploadedVideo, createdAnalysisId]);
 
 	useEffect(() => {
 		if (analysisMode === 'AUTO') {
@@ -398,7 +468,56 @@ export default function UploadContent() {
 		});
 	};
 
-	const persistUploadedWork = ({ videoId, source, duration, title }: WorkDraftPayload) => {
+	const generateThumbnailDataUrl = (file: File): Promise<string | undefined> => {
+		return new Promise((resolve) => {
+			const objectUrl = window.URL.createObjectURL(file);
+			const video = document.createElement('video');
+			video.preload = 'metadata';
+			video.muted = true;
+			video.playsInline = true;
+
+			const cleanup = () => {
+				window.URL.revokeObjectURL(objectUrl);
+			};
+
+			video.onloadeddata = () => {
+				try {
+					const aspectRatio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 767 / 507;
+					const canvas = document.createElement('canvas');
+					const targetWidth = Math.min(video.videoWidth || 767, 767);
+					const targetHeight = Math.round(targetWidth / aspectRatio);
+
+					canvas.width = targetWidth;
+					canvas.height = targetHeight;
+
+					const context = canvas.getContext('2d');
+					if (!context) {
+						cleanup();
+						resolve(undefined);
+						return;
+					}
+
+					context.drawImage(video, 0, 0, canvas.width, canvas.height);
+					const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+					cleanup();
+					resolve(thumbnailDataUrl);
+				} catch (error) {
+					console.warn('[UploadFlow] failed to generate thumbnail', error);
+					cleanup();
+					resolve(undefined);
+				}
+			};
+
+			video.onerror = () => {
+				cleanup();
+				resolve(undefined);
+			};
+
+			video.src = objectUrl;
+		});
+	};
+
+	const persistUploadedWork = ({ videoId, source, duration, title, videoUrl, thumbnailUrl }: WorkDraftPayload) => {
 		if (typeof window === 'undefined') return;
 		const now = new Date();
 		const stamp = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')} ${`${now.getHours()}`.padStart(2, '0')}:${`${now.getMinutes()}`.padStart(2, '0')}`;
@@ -428,10 +547,16 @@ export default function UploadContent() {
 				title: title || works[existingIndex].title || baseWork.title,
 				duration: duration === '-' ? works[existingIndex].duration : duration,
 				source: works[existingIndex].source || source,
+				videoUrl: videoUrl || works[existingIndex].videoUrl,
+				thumbnailUrl: thumbnailUrl || works[existingIndex].thumbnailUrl,
 				videoId,
 			};
 		} else {
-			works.unshift(baseWork);
+			works.unshift({
+				...baseWork,
+				videoUrl,
+				thumbnailUrl,
+			});
 		}
 
 		window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(works));
@@ -529,6 +654,7 @@ export default function UploadContent() {
 				filename: file.name,
 				content_type: contentType,
 				file_size: file.size,
+				title: projectName.trim() || file.name.replace(/\.[^.]+$/, ''),
 			});
 
 			await uploadToGCS(upload_url, file, contentType, (progress) => {
@@ -536,6 +662,26 @@ export default function UploadContent() {
 			});
 
 			await confirmUpload({ video_id });
+
+			const nextPreviewUrl = URL.createObjectURL(file);
+			setUploadedVideoPreviewUrl((prev) => {
+				if (prev) {
+					window.URL.revokeObjectURL(prev);
+				}
+				return nextPreviewUrl;
+			});
+
+			const localThumbnailUrl = await generateThumbnailDataUrl(file);
+			let persistedVideoUrl: string | undefined;
+			let persistedThumbnailUrl: string | undefined;
+			try {
+				const analyzeResult = await analyzeVideo(video_id);
+				persistedVideoUrl = analyzeResult.gcs_view_link;
+				persistedThumbnailUrl = analyzeResult.thumbnail_url || localThumbnailUrl;
+			} catch (error) {
+				console.warn('[UploadFlow] failed to fetch playback URL after upload', error);
+				persistedThumbnailUrl = localThumbnailUrl;
+			}
 
 			setUploadedVideo({
 				videoId: video_id,
@@ -548,6 +694,8 @@ export default function UploadContent() {
 				source: file.name,
 				duration: durationLabel,
 				title: projectName.trim() || file.name.replace(/\.[^.]+$/, ''),
+				videoUrl: persistedVideoUrl,
+				thumbnailUrl: persistedThumbnailUrl,
 			});
 			const draftAnalysisId = ensureDraftAnalysis({
 				videoId: video_id,
@@ -560,9 +708,58 @@ export default function UploadContent() {
 			setAnalysisName((prev) => prev.trim() || '새 작업');
 			setSavedAnalysisName((prev) => prev.trim() || '새 작업');
 			setFlowStep('CONFIGURE');
-			setViewStep('CONFIGURE');
-			successToast('영상 업로드가 완료되었습니다.');
-		} catch (error: any) {
+			const moveToConfigureStage = () => {
+				setViewStep('CONFIGURE');
+			};
+			const cancelAutoAdvance = () => {
+				if (autoAdvanceTimerRef.current) {
+					window.clearTimeout(autoAdvanceTimerRef.current);
+					autoAdvanceTimerRef.current = null;
+				}
+				if (autoAdvanceToastIdRef.current) {
+					toast.dismiss(autoAdvanceToastIdRef.current);
+					autoAdvanceToastIdRef.current = null;
+				}
+			};
+
+			cancelAutoAdvance();
+			autoAdvanceTimerRef.current = Number(window.setTimeout(() => {
+				autoAdvanceTimerRef.current = null;
+				if (autoAdvanceToastIdRef.current) {
+					toast.dismiss(autoAdvanceToastIdRef.current);
+					autoAdvanceToastIdRef.current = null;
+				}
+				moveToConfigureStage();
+			}, 5000));
+
+			autoAdvanceToastIdRef.current = toast.success(
+				<UploadAutoAdvanceToast>
+					<span>영상 업로드가 완료되었습니다. 5초 후 설정 단계로 이동합니다.</span>
+					<UploadAutoAdvanceDismissButton
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							cancelAutoAdvance();
+						}}
+						aria-label="자동 이동 취소"
+					>
+						<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+							<path d="M4 4L10 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+							<path d="M10 4L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+						</svg>
+					</UploadAutoAdvanceDismissButton>
+				</UploadAutoAdvanceToast>,
+				{
+					position: 'bottom-center',
+					autoClose: false,
+					closeOnClick: false,
+					pauseOnHover: true,
+					draggable: false,
+					closeButton: false,
+					pauseOnFocusLoss: false,
+				},
+			);
+			} catch (error: any) {
 			if (error?.error_code === 1003) {
 				errorToast('영상 길이는 최소 1분 이상이어야 합니다.');
 			} else if (error?.error_code === 1008) {
@@ -948,16 +1145,7 @@ export default function UploadContent() {
 			setCreatedAnalysisId(createdAnalysis.id);
 			setFlowStep('READY');
 			setViewStep('READY');
-			successToast('분석을 시작했습니다.');
-			window.setTimeout(() => {
-				updateAnalysisStage(uploadedVideo.videoId, createdAnalysis.id, {
-					status: 'COMPLETE',
-					processStage: 'DONE',
-					briefing: '분석이 완료되었습니다. 결과 화면에서 상세 내용을 확인할 수 있습니다.',
-				});
-				setFlowStep('DONE');
-				setViewStep('DONE');
-			}, 900);
+			successToast('실제 분석 진행 상태를 표시합니다.');
 		} catch (error: any) {
 			errorToast('분석 시작에 실패했습니다.');
 		}
@@ -1086,7 +1274,13 @@ export default function UploadContent() {
 										<>
 											<UploadVideoPreview>
 												<UploadVideoSurface>
-													<UploadVideoLabel>업로드된 영상 영역</UploadVideoLabel>
+													{uploadedVideoPreviewUrl ? (
+														<UploadVideoElement controls preload="metadata">
+															<source src={uploadedVideoPreviewUrl} type={uploadedVideo.contentType || 'video/mp4'} />
+														</UploadVideoElement>
+													) : (
+														<UploadVideoLabel>업로드된 영상 영역</UploadVideoLabel>
+													)}
 												</UploadVideoSurface>
 											</UploadVideoPreview>
 											<UploadCompleteCard>
@@ -1195,8 +1389,8 @@ export default function UploadContent() {
 													<strong>{analysisMode === 'AUTO' ? 'AI 자동' : '커스텀'}</strong>
 													<p>
 														{analysisMode === 'AUTO'
-															? '영상 길이와 흐름에 맞춰 AI가 분할 개수와 요약 방향을 자동으로 조정합니다.'
-															: '분할 개수와 프리셋, 항목 설정을 사용자가 직접 선택해 원하는 방식으로 분석합니다.'}
+															? '현재 로컬 시연본에서는 업로드 후 서버 분석이 바로 시작되며, 이 단계는 결과 화면 진입 전 이름과 표시값을 정리하는 용도입니다.'
+															: '프리셋과 항목 설정은 현재 시연용 표시 단계이며, 실제 분석은 업로드 직후 서버에서 바로 진행됩니다.'}
 													</p>
 												</ModeTip>
 											</AnalysisConfigCard>
@@ -1204,6 +1398,7 @@ export default function UploadContent() {
 										<ConfigureSecondaryColumn>
 											<AnalysisConfigCard $fullWidth>
 												<ConfigTitle>프리셋 설정</ConfigTitle>
+												<PresetConfigHelperText>현재 프리셋 설정은 시연용 UI이며 실제 분석 결과에는 아직 반영되지 않습니다.</PresetConfigHelperText>
 												<ConfigGrid>
 													<label>
 														<span>프리셋</span>
@@ -1268,13 +1463,30 @@ export default function UploadContent() {
 							{showAnalysisStage ? (
 								<StageSurface key="analysis-stage">
 									<CompletionCard>
-										<strong>분석 중입니다</strong>
-										<p>선택한 조건으로 분석을 수행하고 있습니다. 완료되면 결과 화면으로 이동할 수 있습니다.</p>
-										<ProgressDots aria-hidden="true">
-											<span />
-											<span />
-											<span />
-										</ProgressDots>
+										<strong>{isAnalysisFailed ? '분석에 실패했습니다' : '분석 중'}</strong>
+										<p>
+											{isAnalysisFailed
+												? '서버 분석 중 오류가 발생했습니다. 다시 업로드하거나 상태를 확인해 주세요.'
+												: '완료되면 자동으로 완료 단계로 전환됩니다.'}
+										</p>
+										<AnalysisProgressMeta>
+											<span>진행률</span>
+											<strong>{analysisProgress}%</strong>
+										</AnalysisProgressMeta>
+										<AnalysisProgressBar aria-hidden="true">
+											<AnalysisProgressFill style={{ width: `${Math.min(Math.max(analysisProgress, 0), 100)}%` }} />
+										</AnalysisProgressBar>
+										<AnalysisStatusMeta>
+											<AnalysisStatusBadge $status={analysisStatusLabel}>상태 {analysisStatusLabel}</AnalysisStatusBadge>
+											<AnalysisStepBadge>단계 {analysisStepLabel}</AnalysisStepBadge>
+										</AnalysisStatusMeta>
+										{isAnalysisFailed ? null : (
+											<ProgressDots aria-hidden="true">
+												<span />
+												<span />
+												<span />
+											</ProgressDots>
+										)}
 									</CompletionCard>
 								</StageSurface>
 							) : null}
@@ -1792,6 +2004,35 @@ const ProjectPendingText = styled.p`
 	margin-top: ${unit(10)};
 `;
 
+const UploadAutoAdvanceToast = styled.div`
+	display: flex;
+	align-items: center;
+	gap: ${unit(12)};
+
+	span {
+		line-height: 1.45;
+	}
+`;
+
+const UploadAutoAdvanceDismissButton = styled.button`
+	flex-shrink: 0;
+	width: ${unit(28)};
+	height: ${unit(28)};
+	border: 1px solid rgba(255, 255, 255, 0.24);
+	border-radius: ${unit(999)};
+	background: rgba(255, 255, 255, 0.1);
+	color: white;
+	font-size: ${unit(12)};
+	font-weight: 800;
+	cursor: pointer;
+	transition: background-color 0.2s ease, border-color 0.2s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.18);
+		border-color: rgba(255, 255, 255, 0.42);
+	}
+`;
+
 const BackToWorkspaceButton = styled.button`
 	position: fixed;
 	// left: calc(${NAVBAR_WIDTH} + ${unit(50)});
@@ -1871,6 +2112,14 @@ const UploadVideoSurface = styled.div`
 	align-items: center;
 	justify-content: center;
 	box-shadow: inset 0 0 0 1px rgba(174, 202, 241, 0.12);
+`;
+
+const UploadVideoElement = styled.video`
+	width: 100%;
+	height: 100%;
+	border-radius: ${unit(16)};
+	background: rgba(4, 10, 23, 0.92);
+	object-fit: contain;
 `;
 
 const UploadVideoLabel = styled.span`
@@ -2149,10 +2398,124 @@ const MetaRow = styled.div`
 	}
 `;
 
+const getAnalysisStatusBadgeStyle = (status: string) => {
+	if (status === 'COMPLETE') {
+		return {
+			background: 'rgba(33, 150, 83, 0.2)',
+			border: 'rgba(72, 201, 120, 0.44)',
+			color: 'rgba(182, 255, 206, 1)',
+		};
+	}
+	if (status === 'FAILED' || status === 'CANCELED' || status === 'INVALID_VIDEO_ID') {
+		return {
+			background: 'rgba(190, 59, 64, 0.2)',
+			border: 'rgba(255, 125, 130, 0.42)',
+			color: 'rgba(255, 197, 200, 1)',
+		};
+	}
+	if (status === 'PROCESSING' || status === 'RUNNING') {
+		return {
+			background: 'rgba(45, 104, 214, 0.22)',
+			border: 'rgba(110, 177, 255, 0.42)',
+			color: 'rgba(208, 230, 255, 1)',
+		};
+	}
+	return {
+		background: 'rgba(91, 111, 148, 0.22)',
+		border: 'rgba(170, 188, 221, 0.36)',
+		color: 'rgba(229, 237, 251, 0.96)',
+	};
+};
+
+const AnalysisProgressMeta = styled.div`
+	width: min(${unit(420)}, 100%);
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: ${unit(12)};
+	color: rgba(227, 238, 255, 0.92);
+
+	span {
+		font-size: ${unit(13)};
+		font-weight: 600;
+	}
+
+	strong {
+		font-size: ${unit(22)};
+		font-weight: 800;
+		color: white;
+	}
+`;
+
+const AnalysisStatusMeta = styled.div`
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: ${unit(10)};
+	width: min(${unit(420)}, 100%);
+`;
+
+const AnalysisStatusBadge = styled.span<{ $status: string }>`
+	${({ $status }) => {
+		const style = getAnalysisStatusBadgeStyle($status);
+		return `
+			background: ${style.background};
+			border-color: ${style.border};
+			color: ${style.color};
+		`;
+	}}
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: ${unit(8)} ${unit(14)};
+	border-radius: ${unit(999)};
+	border: 1px solid;
+	font-size: ${unit(13)};
+	font-weight: 700;
+	min-height: ${unit(36)};
+`;
+
+const AnalysisStepBadge = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: ${unit(8)} ${unit(14)};
+	border-radius: ${unit(999)};
+	border: 1px solid rgba(164, 188, 226, 0.28);
+	background: rgba(16, 44, 92, 0.35);
+	font-size: ${unit(13)};
+	font-weight: 700;
+	color: rgba(227, 238, 255, 0.96);
+	min-height: ${unit(36)};
+`;
+
+const AnalysisProgressBar = styled.div`
+	width: min(${unit(420)}, 100%);
+	height: ${unit(12)};
+	border-radius: ${unit(999)};
+	background: rgba(27, 52, 98, 0.36);
+	box-shadow: inset 0 0 0 1px rgba(164, 188, 226, 0.28);
+	overflow: hidden;
+`;
+
+const AnalysisProgressFill = styled.div`
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, rgba(104, 196, 255, 1) 0%, rgba(64, 139, 255, 1) 100%);
+	transition: width 0.3s ease;
+`;
+
 const ConfigTitle = styled.h2`
 	font-size: ${unit(19)};
 	font-weight: 800;
 	color: white;
+`;
+
+const PresetConfigHelperText = styled.p`
+	font-size: ${unit(13)};
+	line-height: 1.6;
+	color: rgba(205, 223, 252, 0.88);
 `;
 
 const ConfigModeRow = styled.div`

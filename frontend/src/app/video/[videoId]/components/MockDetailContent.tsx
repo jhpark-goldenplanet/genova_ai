@@ -1,11 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import styled from '@emotion/styled';
 import { keyframes } from '@emotion/react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useModal } from '@/shared/hooks';
+import useGetVideoInfo from '@/shared/hooks/useGetVideoInfo';
 import { unit } from '@/shared/utils/base';
+import { ISegmentsSchema } from '@/typings/schema';
+import { useSplitDownload } from '@/shared/hooks/queries/video';
+import { errorToast, infoToast, successToast } from '@/shared/utils/toastUtils';
 
 type DetailTabType = 'summary' | 'script' | 'split';
 
@@ -76,6 +82,15 @@ const formatSeconds = (seconds: number) => {
 
 const interpolateTime = (totalSeconds: number, percent: number) => formatSeconds((totalSeconds * percent) / 100);
 
+const timeStringToSeconds = (value?: string) => {
+	if (!value) return 0;
+	const parts = value.split(':').map((part) => Number(part));
+	if (parts.some((part) => Number.isNaN(part))) return 0;
+	if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+	if (parts.length === 2) return parts[0] * 60 + parts[1];
+	return parts[0] ?? 0;
+};
+
 const buildTimelineItems = (analysis?: AnalysisItem, duration = '-') => {
 	if (!analysis) return [];
 	const summaryChunks = analysis.briefing
@@ -95,6 +110,57 @@ const buildTimelineItems = (analysis?: AnalysisItem, duration = '-') => {
 	}));
 };
 
+const buildTimelineItemsFromSegments = (segments: ISegmentsSchema[] = []) =>
+	segments.map((segment, index) => ({
+		id: segment.segments_id || `segment-${index + 1}`,
+		timeRange: `${segment.start_time} - ${segment.end_time}`,
+		topic: segment.title || `구간 ${index + 1}`,
+		summary: segment.summary || '요약 정보가 없습니다.',
+		keywords: segment.keywords?.length ? segment.keywords : ['키워드 없음'],
+		script: segment.scripts || '스크립트 정보가 없습니다.',
+	}));
+
+const buildActualSplitSegments = (segments: ISegmentsSchema[] = []) =>
+	segments.map((segment, index) => {
+		const startSeconds = timeStringToSeconds(segment.start_time);
+		const endSeconds = timeStringToSeconds(segment.end_time);
+		return {
+			id: segment.segments_id || `actual-segment-${index + 1}`,
+			order: index + 1,
+			start: startSeconds,
+			end: endSeconds,
+			timeRange: `${segment.start_time} - ${segment.end_time}`,
+			topic: segment.title || `구간 ${index + 1}`,
+			summary: segment.summary || '요약 정보가 없습니다.',
+			keywords: segment.keywords?.length ? segment.keywords : ['키워드 없음'],
+			script: segment.scripts || '스크립트 정보가 없습니다.',
+		};
+	});
+
+const toPercent = (value: number, totalSeconds: number) => {
+	if (!totalSeconds) return 0;
+	return Math.min(Math.max((value / totalSeconds) * 100, 0), 100);
+};
+
+const sanitizeDownloadFileName = (value: string) =>
+	value
+		.trim()
+		.replace(/[\\/:*?"<>|]+/g, '_')
+		.replace(/\s+/g, ' ')
+		.slice(0, 120);
+
+const readFileAsDataUrl = (file: File) =>
+	new Promise<string>((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+		reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+		reader.readAsDataURL(file);
+	});
+
+const AddThumbnailModal = dynamic(() => import('@/app/video/[videoId]/split/components/AddThumbnailModal'), {
+	ssr: false,
+});
+
 type Props = {
 	videoId: string;
 	tab: DetailTabType;
@@ -102,17 +168,24 @@ type Props = {
 
 export default function MockDetailContent({ videoId, tab }: Props) {
 	const searchParams = useSearchParams();
-	const { confirm, closeConfirm } = useModal();
+	const { confirm, closeConfirm, custom, closeFreeModal } = useModal();
 	const initialAnalysisId = searchParams.get('analysisId') ?? '';
 
 	const [works, setWorks] = useState<WorkItem[]>([]);
 	const [selectedAnalysisId, setSelectedAnalysisId] = useState(initialAnalysisId);
 	const [isAllScriptsOpen, setIsAllScriptsOpen] = useState(true);
+	const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
 	const [splitPoints, setSplitPoints] = useState([33, 66]);
 	const [reanalyzeCount, setReanalyzeCount] = useState(0);
 	const [draggingFlagIndex, setDraggingFlagIndex] = useState<number | null>(null);
 	const [selectedSplitPointIndex, setSelectedSplitPointIndex] = useState<number | null>(null);
+	const [isHighlightPulseOn, setIsHighlightPulseOn] = useState(true);
+	const [isDownloadSelectionMode, setIsDownloadSelectionMode] = useState(false);
+	const [selectedDownloadSegmentIds, setSelectedDownloadSegmentIds] = useState<string[]>([]);
+	const [selectedThumbnailImage, setSelectedThumbnailImage] = useState<string | undefined>(undefined);
 	const splitRailRef = useRef<HTMLDivElement | null>(null);
+	const { videoInfo, isConverting, status, step, percentage } = useGetVideoInfo();
+	const splitDownloadMutation = useSplitDownload();
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return;
@@ -124,14 +197,26 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 		}
 	}, []);
 
+	useEffect(() => {
+		if (!videoInfo) return;
+		console.log('[AnalysisResult] server videoInfo', videoInfo);
+		console.log('[AnalysisResult] status snapshot', {
+			videoId,
+			status,
+			step,
+			percentage,
+		});
+	}, [videoInfo, videoId, status, step, percentage]);
+
 	const selectedWork = useMemo(() => works.find((work) => work.videoId === videoId), [works, videoId]);
 	const selectedAnalysis = useMemo(
 		() => selectedWork?.analyses.find((analysis) => analysis.id === selectedAnalysisId) ?? selectedWork?.analyses[0],
 		[selectedAnalysisId, selectedWork],
 	);
+	const actualTimelineItems = useMemo(() => buildTimelineItemsFromSegments(videoInfo?.segments ?? []), [videoInfo?.segments]);
 	const timelineItems = useMemo(
-		() => buildTimelineItems(selectedAnalysis, selectedWork?.duration ?? '-'),
-		[selectedAnalysis, selectedWork?.duration],
+		() => (actualTimelineItems.length ? actualTimelineItems : buildTimelineItems(selectedAnalysis, selectedWork?.duration ?? '-')),
+		[actualTimelineItems, selectedAnalysis, selectedWork?.duration],
 	);
 
 	useEffect(() => {
@@ -147,6 +232,23 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	}, [timelineItems]);
 
 	const totalSeconds = useMemo(() => parseDurationToSeconds(selectedWork?.duration), [selectedWork?.duration]);
+	const actualSplitSegments = useMemo(() => buildActualSplitSegments(videoInfo?.segments ?? []), [videoInfo?.segments]);
+	const actualSplitPoints = useMemo(
+		() =>
+			actualSplitSegments
+				.slice(0, -1)
+				.map((segment) => Math.round(toPercent(segment.end, totalSeconds))),
+		[actualSplitSegments, totalSeconds],
+	);
+	useEffect(() => {
+		if (!actualSplitPoints.length) return;
+		setSplitPoints((prev) => {
+			if (prev.length === actualSplitPoints.length && prev.every((point, index) => point === actualSplitPoints[index])) {
+				return prev;
+			}
+			return actualSplitPoints;
+		});
+	}, [actualSplitPoints]);
 	const splitSegments = useMemo(() => {
 		const sortedPoints = [...splitPoints].sort((a, b) => a - b);
 		const boundaries = [0, ...sortedPoints, 100];
@@ -185,15 +287,59 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 		if (selectedSplitPointIndex === null) return new Set<number>();
 		return new Set([selectedSplitPointIndex, selectedSplitPointIndex + 1]);
 	}, [selectedSplitPointIndex]);
+	const selectedDownloadSegmentIdSet = useMemo(() => new Set(selectedDownloadSegmentIds), [selectedDownloadSegmentIds]);
 	const selectedSplitPointValue = selectedSplitPointIndex === null ? null : splitPoints[selectedSplitPointIndex];
+	const isServerSplitMode = actualSplitSegments.length > 0;
+	const displayedSplitSegments = isServerSplitMode
+		? actualSplitSegments.map((segment, index) => {
+				const boundaries = [0, ...splitPoints, 100];
+				return {
+					...segment,
+					startPercent: boundaries[index] ?? 0,
+					endPercent: boundaries[index + 1] ?? 100,
+				};
+			})
+		: splitSegments.map((segment) => ({
+		...segment,
+		startPercent: segment.start,
+		endPercent: segment.end,
+	}));
+	const displayedSplitPoints = splitPoints;
+	const isAllDownloadSegmentsSelected =
+		isDownloadSelectionMode &&
+		displayedSplitSegments.length > 0 &&
+		selectedDownloadSegmentIds.length === displayedSplitSegments.length;
 
 	const tabTitle = tab === 'script' ? '스크립트 편집 영역' : '수동 분할 편집 영역';
+	const resolvedVideoUrl = videoInfo?.gcs_view_link || selectedWork?.videoUrl;
+	const resolvedThumbnailUrl = videoInfo?.thumbnail_url || selectedWork?.thumbnailUrl;
+	const summaryText = videoInfo?.summary || selectedAnalysis?.briefing || '요약 정보가 없습니다.';
+	const summaryKeywords = videoInfo?.keywords?.length ? videoInfo.keywords : selectedAnalysis?.keywords ?? [];
+	const summaryPromptLabel = selectedAnalysis?.promptLabel || (videoInfo ? '서버 저장 결과' : '-');
+
+	useEffect(() => {
+		if (selectedSplitPointIndex === null) {
+			setIsHighlightPulseOn(true);
+			return;
+		}
+
+		const timer = window.setInterval(() => {
+			setIsHighlightPulseOn((prev) => !prev);
+		}, 700);
+
+		return () => {
+			window.clearInterval(timer);
+		};
+	}, [selectedSplitPointIndex]);
+
 	const renderVideoBox = (compact = false, split = false) => (
 		<VideoBox $compact={compact} $split={split}>
-			{selectedWork?.videoUrl ? (
-				<video controls preload="metadata" poster={selectedWork.thumbnailUrl}>
-					<source src={selectedWork.videoUrl} />
+			{resolvedVideoUrl ? (
+				<video controls preload="metadata" poster={resolvedThumbnailUrl}>
+					<source src={resolvedVideoUrl} />
 				</video>
+			) : isConverting ? (
+				<EmptyText>원본 영상을 준비 중입니다. 분석 완료 후 재생할 수 있습니다.</EmptyText>
 			) : (
 				<EmptyText>원본 영상 미리보기 영역</EmptyText>
 			)}
@@ -257,12 +403,113 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 		});
 	};
 	const handleDownloadSplit = () => {
-		confirm({
-			message: '현재 분할 구간대로 영상을 다운로드 하시겠습니까?',
-			okHandler: () => {
-				closeConfirm();
-			},
+		if (!(videoInfo?.segments?.length && displayedSplitSegments.length)) {
+			errorToast('다운로드할 분할 결과가 없습니다.');
+			return;
+		}
+		setIsDownloadSelectionMode(true);
+		setSelectedDownloadSegmentIds([]);
+		infoToast('프리뷰에서 다운로드할 구간을 선택해 주세요.');
+	};
+	const handleCancelSplitDownloadSelection = () => {
+		setIsDownloadSelectionMode(false);
+		setSelectedDownloadSegmentIds([]);
+	};
+	const handleToggleDownloadSegment = (segmentId: string) => {
+		if (!isDownloadSelectionMode) return;
+		setSelectedDownloadSegmentIds((prev) =>
+			prev.includes(segmentId) ? prev.filter((id) => id !== segmentId) : [...prev, segmentId],
+		);
+	};
+	const handleToggleAllDownloadSegments = () => {
+		if (!isDownloadSelectionMode) return;
+		if (isAllDownloadSegmentsSelected) {
+			setSelectedDownloadSegmentIds([]);
+			return;
+		}
+		setSelectedDownloadSegmentIds(displayedSplitSegments.map((segment) => segment.id));
+	};
+	const handleOpenThumbnailModal = () => {
+		custom({
+			children: <AddThumbnailModal onSelectThumbnail={handleSelectThumbnail} onClose={closeFreeModal} />,
 		});
+	};
+	const handleSelectThumbnail = async (imgFile?: File) => {
+		try {
+			if (!imgFile) {
+				setSelectedThumbnailImage(undefined);
+				infoToast('기본 썸네일 없이 진행합니다.');
+				return;
+			}
+
+			const imageDataUrl = await readFileAsDataUrl(imgFile);
+			if (!imageDataUrl) {
+				throw new Error('Empty image data');
+			}
+
+			setSelectedThumbnailImage(imageDataUrl);
+			successToast('썸네일 이미지가 적용되었습니다.');
+		} catch (error) {
+			console.error('[Thumbnail] failed to read image', error);
+			errorToast('썸네일 이미지를 불러오지 못했습니다.');
+		}
+	};
+	const handleConfirmSplitDownload = async () => {
+		if (!videoId) return;
+		if (!selectedDownloadSegmentIds.length) {
+			errorToast('다운로드할 구간을 선택해 주세요.');
+			return;
+		}
+
+		const selectedSegments = displayedSplitSegments
+			.map((segment, index) => ({ segment, original: videoInfo?.segments?.[index], index }))
+			.filter(({ segment, original }) => original && selectedDownloadSegmentIdSet.has(segment.id));
+
+		if (!selectedSegments.length) {
+			errorToast('선택한 구간 정보를 찾을 수 없습니다.');
+			return;
+		}
+
+		try {
+			const response = await splitDownloadMutation.mutateAsync({
+				videoId,
+				payload: {
+					segments: selectedSegments.map(({ original, index }, downloadIndex) => ({
+						segment_no: downloadIndex + 1,
+						start_time: original!.start_time,
+						end_time: original!.end_time,
+						title: original!.title || `구간 ${index + 1}`,
+					})),
+					thumbnail_image: selectedThumbnailImage,
+				},
+			});
+
+			await Promise.all(
+				response.download_urls.map(async (item, index) => {
+					const downloadResponse = await fetch(item.download_url);
+					if (!downloadResponse.ok) {
+						throw new Error(`Failed to download segment ${index + 1}`);
+					}
+
+					const blob = await downloadResponse.blob();
+					const objectUrl = window.URL.createObjectURL(blob);
+					const anchor = document.createElement('a');
+					const fileBaseName = sanitizeDownloadFileName(item.title || `segment_${index + 1}`);
+
+					anchor.href = objectUrl;
+					anchor.download = `${fileBaseName}.mp4`;
+					document.body.appendChild(anchor);
+					anchor.click();
+					document.body.removeChild(anchor);
+					window.URL.revokeObjectURL(objectUrl);
+				}),
+			);
+			successToast(`${selectedSegments.length}개 구간 다운로드를 시작했습니다.`);
+			handleCancelSplitDownloadSelection();
+		} catch (error) {
+			console.error('[SplitDownload] failed', error);
+			errorToast('분할 다운로드에 실패했습니다.');
+		}
 	};
 
 	useEffect(() => {
@@ -289,6 +536,12 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	}, [draggingFlagIndex]);
 
 	useEffect(() => {
+		if (!isDownloadSelectionMode) return;
+		const availableSegmentIds = new Set(displayedSplitSegments.map((segment) => segment.id));
+		setSelectedDownloadSegmentIds((prev) => prev.filter((id) => availableSegmentIds.has(id)));
+	}, [displayedSplitSegments, isDownloadSelectionMode]);
+
+	useEffect(() => {
 		const handleDocumentMouseDown = (event: MouseEvent) => {
 			const target = event.target as HTMLElement | null;
 			if (!target) return;
@@ -305,29 +558,53 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	}, []);
 
 	return (
-		<Wrap>
+		<Wrap $summaryTab={tab === 'summary'} $summaryExpanded={tab === 'summary' && isTimelineExpanded}>
 			{tab === 'summary' ? (
 				selectedAnalysis ? (
 					<>
-						<SummaryHero>
-							{renderVideoBox(true)}
+						<SummaryTopSection>
+							<SummaryHero>
+								{renderVideoBox(true)}
 
-							<TotalSummaryCard>
-								<SectionTitle>전체 영상 요약</SectionTitle>
-								<SummaryText>{selectedAnalysis.briefing || '요약 정보가 없습니다.'}</SummaryText>
-								<MetaRow>프롬프트: {selectedAnalysis.promptLabel}</MetaRow>
-								<TagRow>
-									{selectedAnalysis.keywords?.length
-										? selectedAnalysis.keywords.map((keyword) => <Tag key={`tag-${selectedAnalysis.id}-${keyword}`}>{keyword}</Tag>)
-										: <EmptyText>키워드 없음</EmptyText>}
-								</TagRow>
-							</TotalSummaryCard>
-						</SummaryHero>
+								<TotalSummaryCard>
+									<SectionTitle>전체 영상 요약</SectionTitle>
+									<SummaryCardTextFrame>
+										<SummaryCardTextScrollArea
+											defer
+											options={{
+												scrollbars: {
+													autoHide: 'leave',
+													autoHideDelay: 180,
+													theme: 'os-theme-genova-subtle',
+												},
+											}}
+										>
+											<SummaryText>{summaryText}</SummaryText>
+										</SummaryCardTextScrollArea>
+									</SummaryCardTextFrame>
+									<SummaryCardMetaArea>
+										<MetaRow>프롬프트: {summaryPromptLabel}</MetaRow>
+										<TagRow>
+											{summaryKeywords.length
+												? summaryKeywords.map((keyword, index) => <Tag key={`tag-${index}-${keyword}`}>{keyword}</Tag>)
+												: <EmptyText>키워드 없음</EmptyText>}
+										</TagRow>
+									</SummaryCardMetaArea>
+								</TotalSummaryCard>
+							</SummaryHero>
+						</SummaryTopSection>
 
-						<TimelineCard>
+						<TimelineCard $expanded={isTimelineExpanded}>
 							<TimelineHeader>
 								<SectionTitle>타임라인</SectionTitle>
 								<TimelineHeaderActions>
+									<TimelineToggleButton
+										type="button"
+										onClick={() => setIsTimelineExpanded((prev) => !prev)}
+										aria-label={isTimelineExpanded ? '타임라인 축소' : '타임라인 확장'}
+									>
+										{isTimelineExpanded ? '축소' : '확장'}
+									</TimelineToggleButton>
 									<TimelineHeaderButton type="button" onClick={() => setIsAllScriptsOpen((prev) => !prev)}>
 										스크립트
 									</TimelineHeaderButton>
@@ -336,6 +613,225 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 									</TimelineHeaderButton>
 								</TimelineHeaderActions>
 							</TimelineHeader>
+							<TimelineList
+								$expanded={isTimelineExpanded}
+								defer
+								options={{
+									scrollbars: {
+										autoHide: isTimelineExpanded ? 'never' : 'leave',
+										autoHideDelay: 180,
+										theme: 'os-theme-genova',
+									},
+								}}
+							>
+								<TimelineListInner>
+									{timelineItems.map((item) => (
+										<TimelineItemCard key={item.id}>
+											<TimelineTop>
+												<TimelineMeta>
+													<small>{item.timeRange}</small>
+													<strong>{item.topic}</strong>
+												</TimelineMeta>
+											</TimelineTop>
+											<TimelineKeywordRow>
+												{item.keywords.map((keyword) => (
+													<TimelineKeyword key={`${item.id}-${keyword}`}>{keyword}</TimelineKeyword>
+												))}
+											</TimelineKeywordRow>
+											<TimelineSummary>{item.summary}</TimelineSummary>
+											<TimelineScriptPanel $open={isAllScriptsOpen}>
+												<TimelineScriptInner>
+													<TimelineScriptTitle>스크립트</TimelineScriptTitle>
+													<TimelineScriptText>{item.script}</TimelineScriptText>
+												</TimelineScriptInner>
+											</TimelineScriptPanel>
+										</TimelineItemCard>
+									))}
+								</TimelineListInner>
+							</TimelineList>
+						</TimelineCard>
+					</>
+				) : (
+					<ContentBox>
+						<EmptyText>선택된 분석이 없습니다.</EmptyText>
+					</ContentBox>
+				)
+			) : tab === 'split' ? (
+				<>
+						<SplitLayout>
+							<SplitPrimaryCard>
+									<SplitCardHeader>
+										<div>
+											<SectionTitle>영상 분할</SectionTitle>
+											<SplitDescription>재생 바의 분할 포인트를 조정한 뒤 재분석하거나, 현재 구간 그대로 분할 다운로드할 수 있습니다.</SplitDescription>
+										</div>
+									</SplitCardHeader>
+
+								<SplitPrimaryMediaBlock>
+									{renderVideoBox(false, true)}
+
+									<SplitRailCard>
+								<SplitRailHeader>
+									<SplitRailHeaderText>
+										<strong>분할 타임라인</strong>
+										<span>마커를 이동해 구간 경계를 조정합니다.</span>
+									</SplitRailHeaderText>
+											<SplitHeaderActions>
+												<SplitBadge>{splitSegments.length}개 구간</SplitBadge>
+												<SplitIconButton type="button" onClick={handleAddSplitPoint} disabled={splitPoints.length >= 4}>
+													추가
+												</SplitIconButton>
+												<SplitDeleteButton
+													type="button"
+													data-split-delete="true"
+													onClick={handleDeleteSplitPoint}
+													disabled={selectedSplitPointIndex === null}
+												>
+													삭제
+												</SplitDeleteButton>
+											</SplitHeaderActions>
+								</SplitRailHeader>
+								<SplitRailArea ref={splitRailRef}>
+									<SplitRailTrack>
+										<SplitRailBase />
+										{displayedSplitSegments.map((segment, index) => (
+											<SplitRailSegment
+												key={segment.id}
+												$left={segment.startPercent}
+												$width={Math.max(segment.endPercent - segment.startPercent, 4)}
+												$index={index}
+												$isFirst={index === 0}
+												$isLast={index === displayedSplitSegments.length - 1}
+												$highlighted={highlightedSegmentIndexes.has(index)}
+											/>
+										))}
+									</SplitRailTrack>
+									{displayedSplitPoints.map((point, index) => (
+										<SplitFlag
+											key={`flag-${index}`}
+											style={{ left: `calc(${point}% - ${unit(7)})` }}
+													data-split-flag="true"
+													onMouseDown={() => {
+														setDraggingFlagIndex(index);
+														setSelectedSplitPointIndex(index);
+													}}
+													$active={selectedSplitPointIndex === index}
+												>
+													<SplitFlagPill $index={index} $active={selectedSplitPointIndex === index} />
+												</SplitFlag>
+											))}
+										</SplitRailArea>
+										<SplitFlagTimeRow>
+											{displayedSplitPoints.map((point, index) => (
+												<SplitFlagTimeLabel
+													key={`time-${index}`}
+													style={{ left: `calc(${point}% - ${unit(18)})` }}
+													$active={selectedSplitPointIndex === index}
+												>
+													{interpolateTime(totalSeconds, point)}
+												</SplitFlagTimeLabel>
+											))}
+										</SplitFlagTimeRow>
+									</SplitRailCard>
+								</SplitPrimaryMediaBlock>
+							</SplitPrimaryCard>
+
+						<SplitSidebar>
+							<SplitSecondaryCard>
+								<SplitCardHeader>
+									<div>
+										<SectionTitle>프리뷰</SectionTitle>
+										<SplitDescription>구간별 시간과 핵심 내용을 빠르게 검토하고 필요한 결과를 바로 확인할 수 있습니다.</SplitDescription>
+									</div>
+									{isDownloadSelectionMode ? (
+										<SplitHeaderActions>
+											<SplitIconButton type="button" onClick={handleToggleAllDownloadSegments}>
+												{isAllDownloadSegmentsSelected ? '전체 해제' : '전체 선택'}
+											</SplitIconButton>
+										</SplitHeaderActions>
+									) : null}
+								</SplitCardHeader>
+								<SplitSegmentList
+									options={{
+										scrollbars: {
+											autoHide: 'leave',
+											autoHideDelay: 180,
+										},
+									}}
+								>
+									<SplitSegmentListInner>
+										{displayedSplitSegments.map((segment, index) => (
+											<SplitSegmentCard
+												key={segment.id}
+												$highlighted={highlightedSegmentIndexes.has(index)}
+												$pulseOn={isHighlightPulseOn}
+												$selected={selectedDownloadSegmentIdSet.has(segment.id)}
+												$selectable={isDownloadSelectionMode}
+												onClick={() => handleToggleDownloadSegment(segment.id)}
+											>
+												<SplitSegmentTop>
+													<SplitSegmentOrder $index={segment.order - 1}>구간 {segment.order}</SplitSegmentOrder>
+													<SplitSegmentTime>
+														<SplitSegmentStamp $highlighted={segment.startPercent === selectedSplitPointValue}>
+															{interpolateTime(totalSeconds, segment.startPercent)}
+														</SplitSegmentStamp>
+														<span> - </span>
+														<SplitSegmentStamp $highlighted={segment.endPercent === selectedSplitPointValue}>
+															{interpolateTime(totalSeconds, segment.endPercent)}
+														</SplitSegmentStamp>
+													</SplitSegmentTime>
+												</SplitSegmentTop>
+												<SplitSegmentTitle>{segment.topic}</SplitSegmentTitle>
+												<TimelineKeywordRow>
+													{segment.keywords.map((keyword) => (
+														<TimelineKeyword key={`${segment.id}-${keyword}`}>{keyword}</TimelineKeyword>
+													))}
+												</TimelineKeywordRow>
+												<TimelineSummary>{segment.summary}</TimelineSummary>
+											</SplitSegmentCard>
+										))}
+									</SplitSegmentListInner>
+								</SplitSegmentList>
+							</SplitSecondaryCard>
+
+							<SplitActionBar>
+								<SplitGhostButton type="button" onClick={handleResetSplit}>
+									초기화
+								</SplitGhostButton>
+								<SplitSecondaryButton type="button" onClick={handleReanalyze}>
+									재분석
+								</SplitSecondaryButton>
+								<SplitSecondaryButton type="button" onClick={handleOpenThumbnailModal}>
+									썸네일 추가
+								</SplitSecondaryButton>
+								{isDownloadSelectionMode ? (
+									<>
+										<SplitGhostButton type="button" onClick={handleCancelSplitDownloadSelection}>
+											취소
+										</SplitGhostButton>
+										<SplitPrimaryButton
+											type="button"
+											onClick={handleConfirmSplitDownload}
+											disabled={!selectedDownloadSegmentIds.length || splitDownloadMutation.isPending}
+										>
+											{selectedDownloadSegmentIds.length}개 다운로드
+										</SplitPrimaryButton>
+									</>
+								) : (
+									<SplitPrimaryButton type="button" onClick={handleDownloadSplit}>
+										분할 다운로드
+									</SplitPrimaryButton>
+								)}
+							</SplitActionBar>
+						</SplitSidebar>
+					</SplitLayout>
+				</>
+			) : (
+				<>
+					{renderVideoBox()}
+					<ContentBox>
+						<h3>{tabTitle}</h3>
+						{timelineItems.length ? (
 							<TimelineList>
 								{timelineItems.map((item) => (
 									<TimelineItemCard key={item.id}>
@@ -350,161 +846,21 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 												<TimelineKeyword key={`${item.id}-${keyword}`}>{keyword}</TimelineKeyword>
 											))}
 										</TimelineKeywordRow>
-										<TimelineSummary>{item.summary}</TimelineSummary>
-										<TimelineScriptPanel $open={isAllScriptsOpen}>
+										<TimelineScriptPanel $open>
 											<TimelineScriptInner>
-												<TimelineScriptTitle>스크립트</TimelineScriptTitle>
+												<TimelineScriptTitle>실제 스크립트</TimelineScriptTitle>
 												<TimelineScriptText>{item.script}</TimelineScriptText>
 											</TimelineScriptInner>
 										</TimelineScriptPanel>
 									</TimelineItemCard>
 								))}
 							</TimelineList>
-						</TimelineCard>
-					</>
-				) : (
-					<ContentBox>
-						<EmptyText>선택된 분석이 없습니다.</EmptyText>
-					</ContentBox>
-				)
-			) : tab === 'split' ? (
-				<>
-					<SplitLayout>
-						<SplitPrimaryCard>
-								<SplitCardHeader>
-									<div>
-										<SectionTitle>영상 분할</SectionTitle>
-										<SplitDescription>재생 바의 분할 포인트를 조정한 뒤 재분석하거나, 현재 구간 그대로 분할 다운로드할 수 있습니다.</SplitDescription>
-									</div>
-								</SplitCardHeader>
-
-							{renderVideoBox(false, true)}
-
-							<SplitRailCard>
-								<SplitRailHeader>
-									<SplitRailHeaderText>
-										<strong>분할 타임라인</strong>
-										<span>마커를 이동해 구간 경계를 조정합니다.</span>
-									</SplitRailHeaderText>
-									<SplitHeaderActions>
-										<SplitBadge>{splitSegments.length}개 구간</SplitBadge>
-										<SplitIconButton type="button" onClick={handleAddSplitPoint} disabled={splitPoints.length >= 4}>
-											추가
-										</SplitIconButton>
-										<SplitDeleteButton
-											type="button"
-											data-split-delete="true"
-											onClick={handleDeleteSplitPoint}
-											disabled={selectedSplitPointIndex === null}
-										>
-											삭제
-										</SplitDeleteButton>
-									</SplitHeaderActions>
-								</SplitRailHeader>
-								<SplitRailArea ref={splitRailRef}>
-									<SplitRailBase />
-									{splitSegments.map((segment, index) => (
-										<SplitRailSegment
-											key={segment.id}
-											$left={segment.start}
-											$width={Math.max(segment.end - segment.start, 4)}
-											$index={index}
-											$isFirst={index === 0}
-											$isLast={index === splitSegments.length - 1}
-											$highlighted={highlightedSegmentIndexes.has(index)}
-										/>
-									))}
-									{splitPoints.map((point, index) => (
-										<SplitFlag
-											key={`flag-${index}`}
-											style={{ left: `calc(${point}% - ${unit(7)})` }}
-											data-split-flag="true"
-											onMouseDown={() => {
-												setDraggingFlagIndex(index);
-												setSelectedSplitPointIndex(index);
-											}}
-											$active={selectedSplitPointIndex === index}
-										>
-											<SplitFlagPill $index={index} $active={selectedSplitPointIndex === index} />
-										</SplitFlag>
-									))}
-								</SplitRailArea>
-								<SplitFlagTimeRow>
-									{splitPoints.map((point, index) => (
-										<SplitFlagTimeLabel
-											key={`time-${index}`}
-											style={{ left: `calc(${point}% - ${unit(18)})` }}
-											$active={selectedSplitPointIndex === index}
-										>
-											{interpolateTime(totalSeconds, point)}
-										</SplitFlagTimeLabel>
-									))}
-								</SplitFlagTimeRow>
-							</SplitRailCard>
-						</SplitPrimaryCard>
-
-						<SplitSidebar>
-							<SplitSecondaryCard>
-								<SplitCardHeader>
-									<div>
-										<SectionTitle>프리뷰</SectionTitle>
-										<SplitDescription>현재 구간 내 스크립트를 기준으로 주제와 핵심키워드를 다시 생성하는 화면입니다.</SplitDescription>
-									</div>
-								</SplitCardHeader>
-								<SplitSegmentList>
-									{splitSegments.map((segment, index) => (
-										<SplitSegmentCard key={segment.id} $highlighted={highlightedSegmentIndexes.has(index)}>
-											<SplitSegmentTop>
-												<SplitSegmentOrder $index={segment.order - 1}>구간 {segment.order}</SplitSegmentOrder>
-												<SplitSegmentTime>
-													<SplitSegmentStamp $highlighted={segment.start === selectedSplitPointValue}>
-														{interpolateTime(totalSeconds, segment.start)}
-													</SplitSegmentStamp>
-													<span> - </span>
-													<SplitSegmentStamp $highlighted={segment.end === selectedSplitPointValue}>
-														{interpolateTime(totalSeconds, segment.end)}
-													</SplitSegmentStamp>
-												</SplitSegmentTime>
-											</SplitSegmentTop>
-											<SplitSegmentTitle>{segment.topic}</SplitSegmentTitle>
-											<TimelineKeywordRow>
-												{segment.keywords.map((keyword) => (
-													<TimelineKeyword key={`${segment.id}-${keyword}`}>{keyword}</TimelineKeyword>
-												))}
-											</TimelineKeywordRow>
-											<TimelineSummary>{segment.summary}</TimelineSummary>
-											<SplitScriptPreview>
-												<SplitScriptLabel>참고 스크립트</SplitScriptLabel>
-												<TimelineScriptText>{segment.script}</TimelineScriptText>
-											</SplitScriptPreview>
-										</SplitSegmentCard>
-									))}
-								</SplitSegmentList>
-							</SplitSecondaryCard>
-
-							<SplitActionBar>
-								<SplitGhostButton type="button" onClick={handleResetSplit}>
-									초기화
-								</SplitGhostButton>
-								<SplitSecondaryButton type="button" onClick={handleReanalyze}>
-									재분석
-								</SplitSecondaryButton>
-								<SplitPrimaryButton type="button" onClick={handleDownloadSplit}>
-									분할 다운로드
-								</SplitPrimaryButton>
-							</SplitActionBar>
-						</SplitSidebar>
-					</SplitLayout>
-				</>
-			) : (
-				<>
-					{renderVideoBox()}
-					<ContentBox>
-						<h3>{tabTitle}</h3>
-						<Placeholder>
-							<p>UI 설계 중입니다.</p>
-							<span>여기에 스크립트 조회/수정 영역이 들어갑니다.</span>
-						</Placeholder>
+						) : (
+							<Placeholder>
+								<p>스크립트 결과가 아직 없습니다.</p>
+								<span>분석 완료 후 서버에 저장된 스크립트가 여기에 표시됩니다.</span>
+							</Placeholder>
+						)}
 					</ContentBox>
 				</>
 			)}
@@ -512,21 +868,30 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	);
 }
 
-const Wrap = styled.main`
-	display: flex;
+const Wrap = styled.main<{ $summaryTab?: boolean; $summaryExpanded?: boolean }>`
+	display: ${({ $summaryTab }) => ($summaryTab ? 'grid' : 'flex')};
 	flex-direction: column;
 	gap: ${unit(16)};
-	height: 100%;
-	min-height: 0;
+	height: ${({ $summaryTab, $summaryExpanded }) => ($summaryTab ? ($summaryExpanded ? 'auto' : '100%') : '100%')};
+	min-height: ${({ $summaryTab }) => ($summaryTab ? '100%' : '0')};
+	overflow: visible;
+	align-content: start;
+	grid-template-rows: ${({ $summaryTab, $summaryExpanded }) =>
+		$summaryTab ? `${unit(430)} ${$summaryExpanded ? 'auto' : `minmax(${unit(250)}, 1fr)`}` : 'none'};
 `;
 
 const VideoBox = styled.article<{ $compact?: boolean; $split?: boolean }>`
-	border: 1px solid rgba(223, 230, 240, 1);
 	border-radius: ${unit(14)};
 	background: rgba(244, 247, 252, 1);
+	min-height: ${({ $compact, $split }) => ($compact ? '0' : $split ? unit(220) : 'auto')};
+	aspect-ratio: ${({ $split }) => ($split ? '16 / 9' : 'auto')};
+	width: ${({ $split }) => ($split ? `min(100%, ${unit(740)})` : '100%')};
+	max-height: ${({ $compact }) => ($compact ? '100%' : 'none')};
 	padding: ${unit(12)};
-	aspect-ratio: 16 / 9;
-	min-height: ${({ $compact, $split }) => ($compact ? unit(280) : $split ? unit(220) : 'auto')};
+	height: ${({ $compact }) => ($compact ? '100%' : 'auto')};
+	border: 1px solid rgba(223, 230, 240, 1);
+	overflow: hidden;
+	align-self: ${({ $split }) => ($split ? 'center' : 'stretch')};
 
 	video {
 		width: 100%;
@@ -534,6 +899,24 @@ const VideoBox = styled.article<{ $compact?: boolean; $split?: boolean }>`
 		object-fit: contain;
 		border-radius: ${unit(10)};
 		background: black;
+	}
+`;
+
+const SummaryTopSection = styled.section`
+	flex: 0 0 ${unit(430)};
+	height: ${unit(430)};
+	min-height: ${unit(430)};
+	max-height: ${unit(430)};
+	flex-shrink: 0;
+	overflow: hidden;
+	width: 100%;
+
+	@media screen and (max-width: 1180px) {
+		flex: none;
+		height: auto;
+		min-height: 0;
+		max-height: none;
+		overflow: visible;
 	}
 `;
 
@@ -556,7 +939,7 @@ const ContentBox = styled.section`
 
 const SplitLayout = styled.section`
 	display: grid;
-	grid-template-columns: minmax(0, 1.22fr) minmax(${unit(332)}, 0.78fr);
+	grid-template-columns: minmax(0, 0.95fr) minmax(${unit(420)}, 1.05fr);
 	gap: ${unit(16)};
 	height: 100%;
 	min-height: 0;
@@ -573,6 +956,7 @@ const SplitPrimaryCard = styled.section`
 	padding: ${unit(18)};
 	display: flex;
 	flex-direction: column;
+	align-items: stretch;
 	gap: ${unit(16)};
 	min-height: 0;
 `;
@@ -580,6 +964,16 @@ const SplitPrimaryCard = styled.section`
 const SplitSecondaryCard = styled(SplitPrimaryCard)`
 	background: rgba(249, 251, 255, 1);
 	min-height: 0;
+`;
+
+const SplitPrimaryMediaBlock = styled.div`
+	width: min(100%, ${unit(740)});
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	gap: ${unit(16)};
+	margin: 0 auto;
 `;
 
 const SplitSidebar = styled.section`
@@ -591,6 +985,7 @@ const SplitSidebar = styled.section`
 `;
 
 const SplitCardHeader = styled.div`
+	width: 100%;
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
@@ -682,12 +1077,15 @@ const SplitDeleteButton = styled.button`
 `;
 
 const SplitRailCard = styled.section`
+	width: min(100%, ${unit(740)});
 	border: 1px solid rgba(223, 230, 240, 1);
 	border-radius: ${unit(14)};
 	background: rgba(247, 250, 255, 1);
 	padding: ${unit(18)};
 	display: flex;
 	flex-direction: column;
+	flex: 1;
+	min-height: 0;
 	gap: ${unit(16)};
 `;
 
@@ -696,6 +1094,7 @@ const SplitRailHeader = styled.div`
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: ${unit(12)};
+	margin-bottom: ${unit(10)};
 
 	strong {
 		font-size: ${unit(15)};
@@ -711,24 +1110,30 @@ const SplitRailHeader = styled.div`
 
 const SplitRailArea = styled.div`
 	position: relative;
-	height: ${unit(48)};
-	padding-top: ${unit(10)};
+	height: ${unit(56)};
+	padding-top: ${unit(18)};
+`;
+
+const SplitRailTrack = styled.div`
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: ${unit(36)};
+	height: ${unit(12)};
+	border-radius: ${unit(999)};
+	overflow: hidden;
 `;
 
 const SplitRailBase = styled.div`
 	position: absolute;
-	left: 0;
-	right: 0;
-	top: ${unit(28)};
-	height: ${unit(12)};
-	border-radius: ${unit(999)};
+	inset: 0;
 	background: linear-gradient(90deg, rgba(231, 238, 249, 1) 0%, rgba(212, 224, 243, 1) 100%);
 	box-shadow: inset 0 0 0 1px rgba(202, 214, 233, 1);
 `;
 
 const SplitRailSegment = styled.div<{ $left: number; $width: number; $index: number; $isFirst: boolean; $isLast: boolean; $highlighted: boolean }>`
 	position: absolute;
-	top: ${unit(28)};
+	top: 0;
 	left: ${({ $left }) => `${$left}%`};
 	width: ${({ $width }) => `${$width}%`};
 	height: ${unit(12)};
@@ -786,36 +1191,70 @@ const SplitFlagPill = styled.span<{ $index: number; $active: boolean }>`
 const SplitFlagTimeRow = styled.div`
 	position: relative;
 	height: ${unit(20)};
-	margin-top: ${unit(-8)};
+	margin-top: ${unit(-2)};
 `;
 
 const SplitFlagTimeLabel = styled.span<{ $active: boolean }>`
 	position: absolute;
-	font-size: ${({ $active }) => ($active ? unit(13) : unit(11))};
+	font-size: ${({ $active }) => ($active ? unit(16) : unit(14))};
 	font-weight: 700;
 	color: ${({ $active }) => ($active ? 'rgba(52, 92, 175, 1)' : 'rgba(82, 97, 125, 1)')};
 	transition: color 0.2s ease, font-size 0.2s ease;
 `;
 
-const SplitSegmentList = styled.div`
-	display: flex;
-	flex-direction: column;
-	gap: ${unit(12)};
-	max-height: ${unit(620)};
-	overflow-y: auto;
-	padding-right: ${unit(4)};
+const SplitSegmentList = styled(OverlayScrollbarsComponent)`
+	flex: 1;
+	min-height: 0;
+
+	.os-content {
+		padding: ${unit(8)} ${unit(12)} ${unit(10)} ${unit(8)};
+	}
+
+	.os-scrollbar {
+		--os-size: ${unit(8)};
+		--os-padding-axis: ${unit(2)};
+		--os-handle-bg: linear-gradient(180deg, rgba(128, 160, 219, 1) 0%, rgba(84, 121, 195, 1) 100%);
+		--os-handle-bg-hover: linear-gradient(180deg, rgba(146, 176, 228, 1) 0%, rgba(97, 134, 207, 1) 100%);
+		--os-handle-bg-active: linear-gradient(180deg, rgba(110, 145, 211, 1) 0%, rgba(76, 111, 184, 1) 100%);
+		--os-track-bg: rgba(232, 238, 248, 0.92);
+	}
+
+	.os-scrollbar-handle {
+		border-radius: ${unit(999)};
+	}
 `;
 
-const SplitSegmentCard = styled.article<{ $highlighted: boolean }>`
-	border: 1px solid rgba(217, 226, 239, 1);
+const SplitSegmentListInner = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(16)};
+`;
+
+const SplitSegmentCard = styled.article<{ $highlighted: boolean; $pulseOn: boolean; $selected: boolean; $selectable: boolean }>`
+	border: 1px solid
+		${({ $selected, $highlighted, $pulseOn }) =>
+			$selected
+				? 'rgba(32, 81, 181, 1)'
+				: $highlighted
+					? $pulseOn
+						? 'rgba(84, 140, 232, 0.9)'
+						: 'rgba(84, 140, 232, 0.5)'
+					: 'rgba(217, 226, 239, 1)'};
 	border-radius: ${unit(12)};
-	background: white;
+	background: ${({ $selected }) => ($selected ? 'rgba(240, 246, 255, 1)' : 'white')};
 	padding: ${unit(16)};
 	display: flex;
 	flex-direction: column;
 	gap: ${unit(12)};
-	border-color: ${({ $highlighted }) => ($highlighted ? 'rgba(84, 140, 232, 1)' : 'rgba(217, 226, 239, 1)')};
-	transition: border-color 0.2s ease;
+	cursor: ${({ $selectable }) => ($selectable ? 'pointer' : 'default')};
+	box-shadow: ${({ $selected }) => ($selected ? `0 ${unit(4)} ${unit(10)} rgba(32, 81, 181, 0.4)` : 'none')};
+	transition: border-color 0.3s ease-in-out, background-color 0.2s ease, transform 0.2s ease;
+
+	&:hover {
+		border-color: ${({ $selectable, $selected }) =>
+			$selectable ? ($selected ? 'rgba(32, 81, 181, 1)' : 'rgba(121, 156, 226, 1)') : undefined};
+		transform: ${({ $selectable }) => ($selectable ? 'translateY(-1px)' : 'none')};
+	}
 `;
 
 const SplitSegmentTop = styled.div`
@@ -887,6 +1326,12 @@ const SplitButtonBase = styled.button`
 	font-weight: 700;
 	cursor: pointer;
 	transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+		box-shadow: none;
+	}
 `;
 
 const SplitGhostButton = styled(SplitButtonBase)`
@@ -917,7 +1362,7 @@ const SplitPrimaryButton = styled(SplitButtonBase)`
 	background: rgba(26, 43, 89, 1);
 	color: white;
 
-	&:hover {
+	&:hover:not(:disabled) {
 		background: rgba(35, 57, 110, 1);
 		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(26, 43, 89, 0.22);
 	}
@@ -925,11 +1370,17 @@ const SplitPrimaryButton = styled(SplitButtonBase)`
 
 const SummaryHero = styled.section`
 	display: grid;
-	grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-	gap: ${unit(16)};
+	grid-template-columns: minmax(0, 1fr) minmax(${unit(430)}, 0.98fr);
+	column-gap: ${unit(15)};
+	height: 100%;
+	min-height: 0;
+	flex-shrink: 0;
+	align-items: stretch;
 
 	@media screen and (max-width: 1180px) {
 		grid-template-columns: 1fr;
+		flex: none;
+		height: auto;
 	}
 `;
 
@@ -940,15 +1391,86 @@ const SummaryCardBase = styled.section`
 	padding: ${unit(18)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(14)};
+	min-height: 0;
 `;
 
-const TotalSummaryCard = styled(SummaryCardBase)``;
+const TotalSummaryCard = styled(SummaryCardBase)`
+	height: 100%;
+`;
 
-const TimelineCard = styled(SummaryCardBase)`
-	background: rgba(249, 251, 255, 1);
+const SummaryCardTextFrame = styled.div`
+	position: relative;
+	display: flex;
 	flex: 1;
 	min-height: 0;
+	margin-top: ${unit(10)};
+	border: 1px solid rgba(239, 239, 239, 1);
+	border-radius: ${unit(10)};
+	background: white;
+	overflow: hidden;
+
+	&::before,
+	&::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: ${unit(8)};
+		height: ${unit(10)};
+		pointer-events: none;
+		z-index: 2;
+	}
+
+	&::before {
+		top: 0;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0) 100%);
+	}
+
+	&::after {
+		bottom: 0;
+		background: linear-gradient(0deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0) 100%);
+	}
+`;
+
+const SummaryCardTextScrollArea = styled(OverlayScrollbarsComponent)`
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	padding: ${unit(10)};
+
+	.os-content {
+		padding: ${unit(14)} ${unit(16)} ${unit(14)} ${unit(14)};
+	}
+
+	.os-scrollbar {
+		--os-size: ${unit(6)};
+		--os-padding-axis: ${unit(2)};
+		--os-handle-bg: rgba(157, 176, 211, 1);
+		--os-handle-bg-hover: rgba(141, 163, 202, 1);
+		--os-handle-bg-active: rgba(121, 145, 189, 1);
+		--os-track-bg: rgba(236, 241, 249, 0.92);
+	}
+`;
+
+const SummaryCardMetaArea = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(14)};
+	flex-shrink: 0;
+	padding-top: ${unit(10)};
+`;
+
+const TimelineCard = styled(SummaryCardBase)<{ $expanded: boolean }>`
+	background: rgba(249, 251, 255, 1);
+	flex: ${({ $expanded }) => ($expanded ? 'none' : '1 1 auto')};
+	height: ${({ $expanded }) => ($expanded ? 'auto' : '100%')};
+	min-height: ${({ $expanded }) => ($expanded ? unit(620) : unit(250))};
+	max-height: ${({ $expanded }) => ($expanded ? 'none' : '100%')};
+	overflow: hidden;
+	flex-shrink: 0;
+	align-self: stretch;
+	box-shadow: ${({ $expanded }) => ($expanded ? `0 ${unit(14)} ${unit(28)} rgba(35, 67, 128, 0.08)` : 'none')};
+	transition: height 0.28s ease, box-shadow 0.28s ease;
 `;
 
 const TimelineHeader = styled.div`
@@ -956,6 +1478,7 @@ const TimelineHeader = styled.div`
 	align-items: center;
 	justify-content: space-between;
 	gap: ${unit(12)};
+	margin-bottom: ${unit(14)};
 `;
 
 const SectionTitle = styled.h3`
@@ -968,6 +1491,29 @@ const TimelineHeaderActions = styled.div`
 	display: flex;
 	align-items: center;
 	gap: ${unit(8)};
+`;
+
+const TimelineToggleButton = styled.button`
+	border: 1px solid rgba(205, 216, 234, 1);
+	background: white;
+	color: rgba(75, 92, 124, 1);
+	border-radius: ${unit(999)};
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: ${unit(7)} ${unit(14)};
+	font-size: ${unit(13)};
+	font-weight: 700;
+	cursor: pointer;
+	transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+
+	&:hover {
+		border-color: rgba(160, 181, 220, 1);
+		background: rgba(247, 250, 255, 1);
+		color: rgba(56, 79, 123, 1);
+		box-shadow: 0 ${unit(4)} ${unit(10)} rgba(40, 70, 130, 0.08);
+		transform: translateY(${unit(-1)});
+	}
 `;
 
 const TimelineHeaderButton = styled.button`
@@ -993,6 +1539,7 @@ const SummaryText = styled.p`
 	font-size: ${unit(15)};
 	line-height: ${unit(24)};
 	color: rgba(58, 73, 105, 1);
+	white-space: pre-wrap;
 `;
 
 const MetaRow = styled.p`
@@ -1015,24 +1562,42 @@ const Tag = styled.span`
 	color: rgba(61, 89, 139, 1);
 `;
 
-const TimelineList = styled.div`
+const TimelineList = styled(OverlayScrollbarsComponent)<{ $expanded?: boolean }>`
+	flex: 1;
+	min-height: 0;
+
+	.os-content {
+		padding-right: ${({ $expanded }) => ($expanded ? '0' : unit(10))};
+	}
+
+	.os-scrollbar {
+		--os-size: ${({ $expanded }) => ($expanded ? '0px' : unit(7))};
+		--os-padding-axis: ${unit(2)};
+		--os-handle-bg: linear-gradient(180deg, rgba(128, 160, 219, 1) 0%, rgba(84, 121, 195, 1) 100%);
+		--os-handle-bg-hover: linear-gradient(180deg, rgba(146, 176, 228, 1) 0%, rgba(97, 134, 207, 1) 100%);
+		--os-handle-bg-active: linear-gradient(180deg, rgba(110, 145, 211, 1) 0%, rgba(76, 111, 184, 1) 100%);
+		--os-track-bg: rgba(232, 238, 248, 0.92);
+	}
+
+	.os-scrollbar-handle {
+		border-radius: ${unit(999)};
+	}
+`;
+
+const TimelineListInner = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: ${unit(12)};
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
-	padding-right: ${unit(4)};
 `;
 
 const TimelineItemCard = styled.article`
 	border: 1px solid rgba(221, 229, 241, 1);
 	border-radius: ${unit(12)};
 	background: white;
-	padding: ${unit(16)};
+	padding: ${unit(14)};
 	display: flex;
 	flex-direction: column;
-	gap: ${unit(12)};
+	gap: ${unit(10)};
 `;
 
 const TimelineTop = styled.div`

@@ -17,11 +17,11 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_FILE_LENGTH = 1;
 
 interface Props {
-	splitAndDownloadVideo: (img_file?: File) => void;
+	onSelectThumbnail: (imgFile?: File) => void;
 	onClose: () => void;
 }
 
-export default function AddThumbnailModal({ splitAndDownloadVideo, onClose }: Props) {
+export default function AddThumbnailModal({ onSelectThumbnail, onClose }: Props) {
 	const { confirm, closeConfirm } = useModal();
 	const { register, handleSubmit, setValue, watch } = useForm<IFormValues>();
 	const watchFiles: File[] = watch('files');
@@ -85,7 +85,7 @@ export default function AddThumbnailModal({ splitAndDownloadVideo, onClose }: Pr
 
 	const onSubmit: SubmitHandler<IFormValues> = async ({ files }) => {
 		onClose();
-		splitAndDownloadVideo(files[0]);
+		onSelectThumbnail(files[0]);
 	};
 
 	const isRegister = register('files', {
@@ -107,7 +107,7 @@ export default function AddThumbnailModal({ splitAndDownloadVideo, onClose }: Pr
 	return (
 		<S.AddThumbnailContainer {...getRootProps()}>
 			<input {...getInputProps()} />
-			<h3>{`분할된 클립 영상의 썸네일을 등록하여\n영상을 더욱 돋보이게 만들어 보세요!`}</h3>
+			<h3>{`썸네일을 등록해주세요`}</h3>
 
 			<S.DragAndDropWrapper isDragActive={isDragActive} onSubmit={handleSubmit(onSubmit)}>
 				<h5>업로드할 파일 놓기</h5>
@@ -132,16 +132,16 @@ export default function AddThumbnailModal({ splitAndDownloadVideo, onClose }: Pr
 					type="button"
 					onClick={() => {
 						confirm({
-							message: '썸네일을 등록하지 않고 분할된 영상을 다운로드하시겠습니까?',
+							message: '썸네일을 추가하지 않고 진행하시겠습니까?',
 							okHandler: () => {
 								onClose();
 								closeConfirm();
-								splitAndDownloadVideo();
+								onSelectThumbnail();
 							},
 						});
 					}}
 				>
-					다음
+					적용
 				</button>
 			</S.LinkInsertButtonWrapper>
 		</S.AddThumbnailContainer>

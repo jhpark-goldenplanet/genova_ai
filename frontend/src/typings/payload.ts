@@ -31,6 +31,8 @@ export interface IGetUploadUrlPayload {
 	filename: string;
 	content_type: string;
 	file_size: number;
+	title?: string;
+	description?: string;
 }
 
 export interface IConfirmUploadPayload {

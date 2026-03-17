@@ -8,6 +8,7 @@ import { successToast, warningToast } from '@/shared/utils/toastUtils';
 import { useModal } from '@/shared/hooks';
 import Image from 'next/image';
 import ico_edit from '@images/ico_edit.png';
+import { analyzeVideo } from '@/shared/apis/video';
 
 type ProcessStage = 'UPLOAD' | 'CONFIGURE' | 'ANALYZE' | 'DONE';
 
@@ -32,6 +33,11 @@ interface WorkItem {
 	thumbnailUrl?: string;
 	videoId?: string;
 	analyses: AnalysisItem[];
+}
+
+interface ServerSummarySnapshot {
+	summary: string;
+	keywords: string[];
 }
 
 type RenameModalState =
@@ -142,6 +148,7 @@ export default function WorkspacePage() {
 	const [renameModal, setRenameModal] = useState<RenameModalState>(null);
 	const [renameDraft, setRenameDraft] = useState('');
 	const [isRenameModalClosing, setIsRenameModalClosing] = useState(false);
+	const [serverSummaries, setServerSummaries] = useState<Record<string, ServerSummarySnapshot>>({});
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return;
@@ -163,13 +170,102 @@ export default function WorkspacePage() {
 		window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(works));
 	}, [works]);
 
+	useEffect(() => {
+		const targets = works.filter(
+			(work) => work.videoId && (!work.videoUrl || work.videoUrl.startsWith('blob:') || !work.thumbnailUrl),
+		);
+		if (!targets.length) return;
+
+		let isCancelled = false;
+
+		const hydrateVideoUrls = async () => {
+			const updates = await Promise.all(
+				targets.map(async (work) => {
+					try {
+						const result = await analyzeVideo(work.videoId as string);
+						if (!result.gcs_view_link && !result.thumbnail_url) return null;
+						return {
+							id: work.id,
+							videoUrl: result.gcs_view_link,
+							thumbnailUrl: result.thumbnail_url,
+						};
+					} catch (error) {
+						console.warn('[Workspace] failed to hydrate playback url', work.videoId, error);
+						return null;
+					}
+				}),
+			);
+
+			if (isCancelled) return;
+
+			const validUpdates = updates.filter((update) => update !== null) as Array<{
+				id: string;
+				videoUrl?: string;
+				thumbnailUrl?: string;
+			}>;
+			if (!validUpdates.length) return;
+
+			setWorks((prev) =>
+				prev.map((work) => {
+					const matched = validUpdates.find((update) => update.id === work.id);
+					if (!matched) return work;
+					return {
+						...work,
+						videoUrl: matched.videoUrl || work.videoUrl,
+						thumbnailUrl: matched.thumbnailUrl || work.thumbnailUrl,
+					};
+				}),
+			);
+		};
+
+		hydrateVideoUrls();
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [works]);
+
 	const selectedWork = useMemo(() => works.find((item) => item.id === selectedWorkId) ?? works[0], [selectedWorkId, works]);
 	const selectedAnalysis = useMemo(
 		() => selectedWork?.analyses.find((analysis) => analysis.id === selectedAnalysisId) ?? selectedWork?.analyses[0],
 		[selectedWork, selectedAnalysisId],
 	);
+	const selectedWorkServerSummary = selectedWork ? serverSummaries[selectedWork.id] : undefined;
+	const displayedBriefing = selectedWorkServerSummary?.summary || selectedAnalysis?.briefing || '요약 정보가 없습니다.';
+	const displayedKeywords = (selectedWorkServerSummary?.keywords?.length
+		? selectedWorkServerSummary.keywords.slice(0, 5)
+		: selectedAnalysis?.keywords) ?? [];
 	const displayedAnalysisCount = selectedWork ? Math.min(selectedWork.analyses.length, MAX_ANALYSIS_COUNT) : 0;
 	const emptySlotsCount = Math.max(0, MAX_ANALYSIS_COUNT - displayedAnalysisCount);
+
+	useEffect(() => {
+		if (!selectedWork?.videoId) return;
+		if (serverSummaries[selectedWork.id]) return;
+
+		let isCancelled = false;
+
+		const hydrateServerSummary = async () => {
+			try {
+				const result = await analyzeVideo(selectedWork.videoId as string);
+				if (isCancelled) return;
+				setServerSummaries((prev) => ({
+					...prev,
+					[selectedWork.id]: {
+						summary: result.summary || '',
+						keywords: Array.isArray(result.keywords) ? result.keywords : [],
+					},
+				}));
+			} catch (error) {
+				console.warn('[Workspace] failed to hydrate analysis summary', selectedWork.videoId, error);
+			}
+		};
+
+		hydrateServerSummary();
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [selectedWork, serverSummaries]);
 
 	useEffect(() => {
 		if (!selectedWork) return;
@@ -425,28 +521,31 @@ export default function WorkspacePage() {
 
 							{selectedAnalysis ? (
 								<SummarySection>
-									<PaneTitle>작업 요약 브리핑</PaneTitle>
-									<SummaryBox>{selectedAnalysis.briefing}</SummaryBox>
+									<PaneTitle>분석 결과 미리보기</PaneTitle>
+									<SummaryBox>
+										<SummaryTextContent>{displayedBriefing}</SummaryTextContent>
+										<SummaryFooter>
+											<KeywordRow>
+												{displayedKeywords.map((keyword) => (
+													<Keyword key={`analysis-${selectedAnalysis.id}-${keyword}`}>{keyword}</Keyword>
+												))}
+											</KeywordRow>
+											<SummaryActions>
+												<SecondaryButton type="button" onClick={handleEditAnalysis}>
+													작업 수정
+												</SecondaryButton>
+												<PrimaryButton
+													type="button"
+													onClick={handleOpenResult}
+												>
+													분석 결과
+												</PrimaryButton>
+											</SummaryActions>
+										</SummaryFooter>
+									</SummaryBox>
 									<SubText>프롬프트: {selectedAnalysis.promptLabel}</SubText>
-									<KeywordRow>
-										{selectedAnalysis.keywords.map((keyword) => (
-											<Keyword key={`analysis-${selectedAnalysis.id}-${keyword}`}>{keyword}</Keyword>
-										))}
-									</KeywordRow>
 								</SummarySection>
 							) : null}
-
-							<BottomActions>
-								<SecondaryButton type="button" onClick={handleEditAnalysis}>
-									작업 수정
-								</SecondaryButton>
-								<PrimaryButton
-									type="button"
-									onClick={handleOpenResult}
-								>
-									분석 결과
-								</PrimaryButton>
-							</BottomActions>
 						</>
 					) : null}
 				</PreviewPanel>
@@ -490,6 +589,10 @@ const Page = styled.main`
 	display: flex;
 	flex-direction: column;
 	gap: ${unit(18)};
+	height: 100dvh;
+	min-height: 100dvh;
+	box-sizing: border-box;
+	overflow: hidden;
 `;
 
 const HeaderRow = styled.header`
@@ -532,7 +635,9 @@ const BodyGrid = styled.section`
 	display: grid;
 	grid-template-columns: ${unit(292)} 1fr;
 	gap: ${unit(16)};
-	min-height: calc(100dvh - ${unit(136)});
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
 `;
 
 const CardList = styled.div`
@@ -622,6 +727,7 @@ const ThumbWrap = styled.div`
 	overflow: hidden;
 	background: rgba(231, 237, 248, 1);
 	margin-bottom: ${unit(10)};
+	flex-shrink: 0;
 
 	img {
 		display: block;
@@ -658,6 +764,8 @@ const PreviewPanel = styled.section`
 	display: flex;
 	flex-direction: column;
 	gap: ${unit(14)};
+	min-height: 0;
+	overflow: hidden;
 `;
 
 const TitleRow = styled.div`
@@ -696,10 +804,12 @@ const VideoPane = styled.div`
 	border-radius: ${unit(12)};
 	overflow: hidden;
 	background: rgba(13, 20, 34, 1);
-	aspect-ratio: 16 / 9;
 	width: 100%;
-	min-height: ${unit(360)};
+	aspect-ratio: 767 / 507;
+	height: auto;
+	min-height: 0;
 	min-width: 0;
+	align-self: start;
 
 	video {
 		width: 100%;
@@ -988,18 +1098,51 @@ const SummarySection = styled.section`
 	gap: ${unit(10)};
 `;
 
+const SummaryFooter = styled.div`
+	position: absolute;
+	left: ${unit(12)};
+	right: ${unit(12)};
+	bottom: ${unit(12)};
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: ${unit(12)};
+`;
+
+const SummaryActions = styled.div`
+	display: flex;
+	justify-content: flex-end;
+	gap: ${unit(10)};
+	flex-shrink: 0;
+`;
+
 const SummaryBox = styled.div`
+	position: relative;
 	background: rgba(246, 249, 255, 1);
 	border-radius: ${unit(10)};
-	padding: ${unit(12)};
+	padding: ${unit(12)} ${unit(12)} ${unit(68)};
 	font-size: ${unit(15)};
 	color: rgba(45, 60, 90, 1);
+	min-height: ${unit(136)};
+`;
+
+const SummaryTextContent = styled.div`
+	line-height: 1.55;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	text-overflow: ellipsis;
+	word-break: break-word;
 `;
 
 const KeywordRow = styled.div`
 	display: flex;
 	flex-wrap: wrap;
 	gap: ${unit(6)};
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
 `;
 
 const Keyword = styled.span`
@@ -1025,13 +1168,6 @@ const EmptyState = styled.div`
 		font-size: ${unit(13)};
 		color: rgba(95, 109, 134, 1);
 	}
-`;
-
-const BottomActions = styled.div`
-	margin-top: auto;
-	display: flex;
-	justify-content: flex-end;
-	gap: ${unit(10)};
 `;
 
 const InlineButton = styled.button`
