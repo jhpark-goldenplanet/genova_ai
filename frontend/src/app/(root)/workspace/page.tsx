@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import styled from '@emotion/styled';
+import Button from '@/components/Button';
+import * as ModalS from '@/components/Modal/styled';
 import { unit } from '@/shared/utils/base';
 import { successToast, warningToast } from '@/shared/utils/toastUtils';
 import { useModal } from '@/shared/hooks';
@@ -531,15 +533,12 @@ export default function WorkspacePage() {
 												))}
 											</KeywordRow>
 											<SummaryActions>
-												<SecondaryButton type="button" onClick={handleEditAnalysis}>
+												<Button type="button" status="neutral_outlined" onClick={handleEditAnalysis} width={96}>
 													작업 수정
-												</SecondaryButton>
-												<PrimaryButton
-													type="button"
-													onClick={handleOpenResult}
-												>
+												</Button>
+												<Button type="button" status="primary" onClick={handleOpenResult} width={96}>
 													분석 결과
-												</PrimaryButton>
+												</Button>
 											</SummaryActions>
 										</SummaryFooter>
 									</SummaryBox>
@@ -557,26 +556,26 @@ export default function WorkspacePage() {
 					onClick={closeRenameModal}
 				>
 					<RenameModalCard $closing={isRenameModalClosing} onClick={(e) => e.stopPropagation()}>
-						<h3>{renameModal.target === 'project' ? '프로젝트명 변경' : '작업명 변경'}</h3>
-						<p>{renameModal.target === 'project' ? '프로젝트에 표시할 이름을 설정합니다.' : '작업에 표시할 이름을 설정합니다.'}</p>
+						<ModalS.SharedModalHeader>
+							<ModalS.SharedModalTitle>{renameModal.target === 'project' ? '프로젝트명 변경' : '작업명 변경'}</ModalS.SharedModalTitle>
+							<ModalS.SharedModalDescription>
+								{renameModal.target === 'project' ? '프로젝트에 표시할 이름을 설정합니다.' : '작업에 표시할 이름을 설정합니다.'}
+							</ModalS.SharedModalDescription>
+						</ModalS.SharedModalHeader>
 						<RenameInput
 							value={renameDraft}
 							onChange={(e) => setRenameDraft(e.target.value)}
 							placeholder="변경할 이름을 입력하세요."
 							autoFocus
 						/>
-						<RenameActions>
-							<RenameButton
-								type="button"
-								$secondary
-								onClick={closeRenameModal}
-							>
+						<ModalS.SharedModalFooter>
+							<Button type="button" status="neutral_outlined" onClick={closeRenameModal} width={84}>
 								취소
-							</RenameButton>
-							<RenameButton type="button" onClick={applyRename}>
+							</Button>
+							<Button type="button" status="primary" onClick={applyRename} width={84}>
 								적용
-							</RenameButton>
-						</RenameActions>
+							</Button>
+						</ModalS.SharedModalFooter>
 					</RenameModalCard>
 				</RenameOverlay>
 			) : null}
@@ -1187,117 +1186,12 @@ const InlineButton = styled.button`
 	}
 `;
 
-const PrimaryButton = styled.button`
-	border: none;
-	background: rgba(41, 85, 168, 1);
-	color: white;
-	border-radius: ${unit(10)};
-	padding: ${unit(11)} ${unit(16)};
-	font-size: ${unit(15)};
-	font-weight: 700;
-	cursor: pointer;
-	transition: background-color 0.2s ease, box-shadow 0.2s ease;
-
-	&:hover {
-		background: rgba(49, 95, 183, 1);
-		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(41, 85, 168, 0.22);
-	}
-`;
-
-const SecondaryButton = styled.button`
-	border: 1px solid rgba(41, 85, 168, 0.24);
-	background: rgba(241, 246, 255, 1);
-	color: rgba(41, 85, 168, 1);
-	border-radius: ${unit(10)};
-	padding: ${unit(11)} ${unit(16)};
-	font-size: ${unit(15)};
-	font-weight: 700;
-	cursor: pointer;
-	transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-
-	&:hover {
-		background: rgba(232, 240, 255, 1);
-		border-color: rgba(41, 85, 168, 0.38);
-		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(41, 85, 168, 0.12);
-	}
-`;
-
-const RenameOverlay = styled.div<{ $closing?: boolean }>`
-	@keyframes renameOverlayFadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	@keyframes renameOverlayFadeOut {
-		from {
-			opacity: 1;
-		}
-		to {
-			opacity: 0;
-		}
-	}
-
-	position: fixed;
-	inset: 0;
-	background: rgba(8, 16, 33, 0.52);
-	display: flex;
-	align-items: center;
-	justify-content: center;
+const RenameOverlay = styled(ModalS.SharedModalOverlay)`
 	z-index: 1200;
-	animation: ${({ $closing }) =>
-		$closing ? 'renameOverlayFadeOut 0.22s ease forwards' : 'renameOverlayFadeIn 0.22s ease forwards'};
 `;
 
-const RenameModalCard = styled.section<{ $closing?: boolean }>`
-	@keyframes renameModalFadeSlideIn {
-		from {
-			opacity: 0;
-			transform: translateY(${unit(18)});
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	@keyframes renameModalFadeSlideOut {
-		from {
-			opacity: 1;
-			transform: translateY(0);
-		}
-		to {
-			opacity: 0;
-			transform: translateY(${unit(18)});
-		}
-	}
-
+const RenameModalCard = styled(ModalS.SharedModalPanel)`
 	width: min(${unit(420)}, calc(100vw - ${unit(32)}));
-	background: white;
-	border-radius: ${unit(16)};
-	border: 1px solid rgba(222, 229, 237, 1);
-	box-shadow: 0 ${unit(18)} ${unit(40)} rgba(18, 34, 66, 0.18);
-	padding: ${unit(24)};
-	display: flex;
-	flex-direction: column;
-	gap: ${unit(18)};
-	animation: ${({ $closing }) =>
-		$closing ? 'renameModalFadeSlideOut 0.22s ease forwards' : 'renameModalFadeSlideIn 0.22s ease forwards'};
-
-	h3 {
-		font-size: ${unit(22)};
-		font-weight: 700;
-		color: rgba(26, 43, 89, 1);
-	}
-
-	p {
-		margin-top: ${unit(-10)};
-		font-size: ${unit(14)};
-		color: rgba(86, 102, 128, 1);
-	}
 `;
 
 const RenameInput = styled.input`
@@ -1312,30 +1206,5 @@ const RenameInput = styled.input`
 	&:focus {
 		border-color: rgba(84, 121, 190, 1);
 		box-shadow: 0 0 0 ${unit(3)} rgba(84, 121, 190, 0.18);
-	}
-`;
-
-const RenameActions = styled.div`
-	display: flex;
-	justify-content: flex-end;
-	gap: ${unit(8)};
-`;
-
-const RenameButton = styled.button<{ $secondary?: boolean }>`
-	min-width: ${unit(78)};
-	border: 1px solid ${({ $secondary }) => ($secondary ? 'rgba(202, 215, 236, 1)' : 'rgba(41, 85, 168, 1)')};
-	background: ${({ $secondary }) => ($secondary ? 'rgba(246, 248, 252, 1)' : 'rgba(41, 85, 168, 1)')};
-	color: ${({ $secondary }) => ($secondary ? 'rgba(53, 74, 112, 1)' : 'white')};
-	border-radius: ${unit(8)};
-	padding: ${unit(10)} ${unit(16)};
-	font-size: ${unit(14)};
-	font-weight: 700;
-	cursor: pointer;
-	transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-
-	&:hover {
-		background: ${({ $secondary }) => ($secondary ? 'rgba(239, 244, 251, 1)' : 'rgba(49, 95, 183, 1)')};
-		border-color: ${({ $secondary }) => ($secondary ? 'rgba(186, 203, 232, 1)' : 'rgba(49, 95, 183, 1)')};
-		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(41, 85, 168, 0.22);
 	}
 `;

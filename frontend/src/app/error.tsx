@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Button from '@/components/Button';
 
 export default function Error({
   error,
@@ -45,35 +46,12 @@ export default function Error({
         <p style={{ color: '#666', marginBottom: '24px' }}>
           요청을 처리하는 중 문제가 발생했습니다.
         </p>
-        <button
-          onClick={() => reset()}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            marginRight: '8px',
-          }}
-        >
+        <Button type="button" status="primary" onClick={() => reset()} width={120} height={44} style={{ marginRight: '8px' }}>
           다시 시도
-        </button>
-        <button
-          onClick={() => (window.location.href = '/')}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#666',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-        >
+        </Button>
+        <Button type="button" status="neutral" onClick={() => (window.location.href = '/')} width={120} height={44}>
           홈으로
-        </button>
+        </Button>
       </div>
     </div>
   );

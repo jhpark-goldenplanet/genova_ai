@@ -1,5 +1,7 @@
 'use client';
 
+import Button from '@/components/Button';
+import * as ModalS from '@/components/Modal/styled';
 import * as S from './styled';
 
 import { SubmitHandler, useForm } from 'react-hook-form';
@@ -271,8 +273,12 @@ export default function NewVideoModal({ setIsBusy, onClose }: Props) {
 	return (
 		<S.AddThumbnailContainer {...getRootProps()} onSubmit={handleSubmit(onSubmit)}>
 			<input {...getInputProps()} />
-			<h2>{`새로운 영상으로 시작할까요?`}</h2>
-			<p>{`새 영상을 추가하면 현재 진행 중인 작업은 초기화됩니다.\n원하는 파일을 업로드하거나 링크를 삽입하여 새롭게 시작하세요.`}</p>
+			<ModalS.SharedModalHeader>
+				<ModalS.SharedModalTitle>새로운 영상으로 시작할까요?</ModalS.SharedModalTitle>
+				<ModalS.SharedModalDescription>
+					새 영상을 추가하면 현재 진행 중인 작업은 초기화됩니다. 원하는 파일을 업로드하거나 링크를 삽입해 새롭게 시작하세요.
+				</ModalS.SharedModalDescription>
+			</ModalS.SharedModalHeader>
 
 			<S.DragAndDropWrapper isDragActive={isDragActive}>
 				<h5>업로드할 파일 놓기</h5>
@@ -306,13 +312,14 @@ export default function NewVideoModal({ setIsBusy, onClose }: Props) {
 
 			{errors.input && <S.ErrorMessage>{errors.input.message}</S.ErrorMessage>}
 
-			<S.LinkInsertButtonWrapper error={!isValidUrl}>
-				<button type="button" onClick={onClose}>
+			<ModalS.SharedModalFooter>
+				<Button type="button" status="neutral_outlined" onClick={onClose} width={88}>
 					취소
-				</button>
-
-				<button type="submit">확인</button>
-			</S.LinkInsertButtonWrapper>
+				</Button>
+				<Button type="submit" status="primary" width={88} disabled={!watchFiles?.length && !isValidUrl}>
+					확인
+				</Button>
+			</ModalS.SharedModalFooter>
 		</S.AddThumbnailContainer>
 	);
 }

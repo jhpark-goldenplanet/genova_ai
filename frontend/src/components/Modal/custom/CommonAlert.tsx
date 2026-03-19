@@ -1,8 +1,8 @@
 import * as S from './styled';
+import Button from '@/components/Button';
 import ico_error from '@images/ico_error.png';
 import React, { FC } from 'react';
-import { StringKeyAndVal } from '@/typings/base';
-import { Colors } from '@/styles/globalStyles';
+import { ButtonStatus, StringKeyAndVal } from '@/typings/base';
 
 interface Props {
 	message?: string;
@@ -19,13 +19,13 @@ export const modalIcon: StringKeyAndVal = {
 	none: '',
 };
 
-const buttonStyle: { [key: string]: any } = {
-	success: { backgroundColor: Colors.primary },
-	error: { backgroundColor: Colors.danger },
-	warning: { backgroundColor: Colors.warning },
-	info: { backgroundColor: Colors.primary },
-	question: { backgroundColor: Colors.primary },
-	none: { backgroundColor: Colors.primary },
+const buttonStatusMap: Record<Props['type'], ButtonStatus> = {
+	success: 'primary',
+	error: 'danger',
+	warning: 'warning',
+	info: 'primary',
+	question: 'primary',
+	none: 'primary',
 };
 
 const CommonAlert: FC<Props> = ({ message, type = 'info', buttonHandler }) => {
@@ -65,9 +65,9 @@ const CommonAlert: FC<Props> = ({ message, type = 'info', buttonHandler }) => {
 			</S.ModalDescription>
 
 			<S.ModalButtonWrapper>
-				<button type="button" onClick={buttonHandler} style={buttonStyle[type]}>
+				<Button type="button" status={buttonStatusMap[type]} onClick={buttonHandler} width={96}>
 					다시 시도
-				</button>
+				</Button>
 			</S.ModalButtonWrapper>
 		</S.CommonAlert>
 	);

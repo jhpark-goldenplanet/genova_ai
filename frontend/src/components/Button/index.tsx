@@ -1,21 +1,18 @@
-import React, { FC } from 'react';
+import React, { ButtonHTMLAttributes, FC, ReactNode } from 'react';
 import { ButtonStatus } from '@/typings/base';
 import { isUndefined } from 'lodash-es';
 
 import * as S from './styled';
 
-interface ButtonProps {
-	text: string;
-	status: ButtonStatus;
-	onClick?: any;
-	width?: number;
-	height?: number;
-	radius?: number;
-	disabled?: boolean;
-
-	children?: JSX.Element;
-	style?: React.CSSProperties;
-	type?: 'button' | 'submit' | 'reset';
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+	text?: string;
+	status?: ButtonStatus;
+	width?: number | string;
+	height?: number | string;
+	radius?: number | string;
+	fullWidth?: boolean;
+	size?: 'sm' | 'md' | 'lg';
+	children?: ReactNode;
 }
 
 /**
@@ -35,16 +32,19 @@ interface ButtonProps {
  */
 const Button: FC<ButtonProps> = ({
 	text,
-	status,
+	status = 'primary',
 	onClick,
 	width = 140,
 	height = 38,
 	radius,
+	fullWidth = false,
+	size = 'md',
 	disabled,
-
 	children,
 	style = {},
 	type = 'button',
+	className,
+	...rest
 }) => {
 	const hasIcon = !isUndefined(children);
 	return (
@@ -55,14 +55,15 @@ const Button: FC<ButtonProps> = ({
 			$radius={radius}
 			$status={status}
 			$hasIcon={hasIcon}
+			$fullWidth={fullWidth}
+			$size={size}
 			type={type}
 			style={style}
 			onClick={onClick}
+			className={className}
+			{...rest}
 		>
-			<>
-				{children}
-				{text}
-			</>
+			{children ?? text}
 		</S.Button>
 	);
 };

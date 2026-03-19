@@ -1,4 +1,5 @@
-import React, { FC } from 'react';
+import React, { FC, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import styled from '@emotion/styled';
 import { NAVBAR_WIDTH } from '@/shared/constants';
 
@@ -14,9 +15,16 @@ interface IContainerProps {
 }
 
 const Loader: FC<IProps> = ({ isLoading, isFetching, progress, withSidebar = false }) => {
-	if (!(isLoading || isFetching)) return null;
+	const [mounted, setMounted] = useState(false);
 
-	return (
+	useEffect(() => {
+		setMounted(true);
+	}, []);
+
+	if (!(isLoading || isFetching)) return null;
+	if (!mounted) return null;
+
+	return createPortal(
 		<Container className="wrapper" withSidebar={withSidebar}>
 			<figure>
 				<svg viewBox="0 0 100 100" style={{ width: '80px', height: '80px', margin: '0 auto' }}>
@@ -34,7 +42,8 @@ const Loader: FC<IProps> = ({ isLoading, isFetching, progress, withSidebar = fal
 					<ProgressText>{progress}%</ProgressText>
 				)}
 			</figure>
-		</Container>
+		</Container>,
+		document.body
 	);
 };
 

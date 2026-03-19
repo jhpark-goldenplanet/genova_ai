@@ -1,4 +1,5 @@
 import * as S from './styled';
+import Button from '@/components/Button';
 import React, { FC } from 'react';
 import { StringKeyAndVal } from '@/typings/base';
 
@@ -53,17 +54,18 @@ const CommonConfirm: FC<Props> = ({ message, type = 'error', buttonHandler }) =>
 
 			<S.ModalButtonWrapper $isConfirm>
 				{[0, 1].map((i) => (
-					<button
+					<Button
 						key={i}
-						className={i === 0 ? 'secondary' : 'primary'}
+						status={i === 0 ? 'neutral_outlined' : 'primary'}
 						type="button"
+						width={84}
 						onClick={() => {
 							if (i === 0) buttonHandler[0]();
 							else buttonHandler[1]();
 						}}
 					>
 						{buttons[i]}
-					</button>
+					</Button>
 				))}
 			</S.ModalButtonWrapper>
 		</S.CommonAlert>

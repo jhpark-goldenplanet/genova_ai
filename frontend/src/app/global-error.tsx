@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Button from '@/components/Button';
 
 export default function GlobalError({
   error,
@@ -49,20 +50,9 @@ export default function GlobalError({
             <p style={{ color: '#666', marginBottom: '24px' }}>
               일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.
             </p>
-            <button
-              onClick={() => reset()}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: '#0070f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '16px',
-              }}
-            >
+            <Button type="button" status="primary" onClick={() => reset()} width={120} height={44}>
               다시 시도
-            </button>
+            </Button>
           </div>
         </div>
       </body>

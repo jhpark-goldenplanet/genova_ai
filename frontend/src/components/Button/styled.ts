@@ -5,17 +5,24 @@ import { ButtonStatus } from '@/typings/base';
 import { Colors } from '@/styles/globalStyles';
 
 interface ButtonStyleProps {
-	$width?: number;
-	$height?: number;
-	$radius?: number;
+	$width?: number | string;
+	$height?: number | string;
+	$radius?: number | string;
 	$status: ButtonStatus;
 	$hasIcon: boolean;
+	$fullWidth: boolean;
+	$size: 'sm' | 'md' | 'lg';
 }
+
+const resolveUnit = (value?: number | string, fallback?: string) => {
+	if (typeof value === 'number') return unit(value);
+	return value || fallback || 'auto';
+};
 
 const status = {
 	primary: css`
 		background-color: ${Colors.primary};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -25,9 +32,21 @@ const status = {
 		color: ${Colors.primary};
 	`,
 
+	neutral: css`
+		background-color: rgba(246, 248, 252, 1);
+		border: 1px solid rgba(202, 215, 236, 1);
+		color: rgba(53, 74, 112, 1);
+	`,
+
+	neutral_outlined: css`
+		background-color: white;
+		border: 1px solid rgba(201, 211, 225, 1);
+		color: rgba(84, 98, 130, 1);
+	`,
+
 	secondary: css`
 		background-color: ${Colors.secondary};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -39,7 +58,7 @@ const status = {
 
 	third: css`
 		background-color: ${Colors.third};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -51,7 +70,7 @@ const status = {
 
 	danger: css`
 		background-color: ${Colors.danger};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -63,7 +82,7 @@ const status = {
 
 	warning: css`
 		background-color: ${Colors.warning};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -75,7 +94,7 @@ const status = {
 
 	success: css`
 		background-color: ${Colors.success};
-		border: none;
+		border: 1px solid transparent;
 		color: #fff;
 	`,
 
@@ -87,12 +106,32 @@ const status = {
 
 	disabled: css`
 		background-color: ${Colors.disabled};
-		border: none;
+		border: 1px solid transparent;
 		color: #c3c7cc;
 
 		&:hover {
 			cursor: default;
+			transform: none;
+			box-shadow: none;
 		}
+	`,
+};
+
+const sizeStyles = {
+	sm: css`
+		min-height: ${unit(36)};
+		padding: 0 ${unit(14)};
+		font-size: ${unit(13)};
+	`,
+	md: css`
+		min-height: ${unit(40)};
+		padding: 0 ${unit(16)};
+		font-size: ${unit(14)};
+	`,
+	lg: css`
+		min-height: ${unit(44)};
+		padding: 0 ${unit(18)};
+		font-size: ${unit(15)};
 	`,
 };
 
@@ -100,6 +139,8 @@ export const Button = styled.button<ButtonStyleProps>`
 	${({ $status }) =>
 		($status === 'primary' && status.primary) ||
 		($status === 'primary_outlined' && status.primary_outlined) ||
+		($status === 'neutral' && status.neutral) ||
+		($status === 'neutral_outlined' && status.neutral_outlined) ||
 		/*  */
 
 		($status === 'secondary' && status.secondary) ||
@@ -123,22 +164,38 @@ export const Button = styled.button<ButtonStyleProps>`
 		/*  */
 		($status === 'disabled' && status.disabled)};
 
-	border-radius: ${({ $radius }) => ($radius ? unit($radius) : unit(7))};
+	${({ $size }) => sizeStyles[$size]};
+	border-radius: ${({ $radius }) => resolveUnit($radius, unit(8))};
 	${({ $hasIcon }) => $hasIcon && `gap: ${unit(5)}`};
 	display: flex;
 	justify-content: center;
 	align-items: center;
+	width: ${({ $fullWidth }) => ($fullWidth ? '100%' : 'auto')};
 
-	font-size: ${unit(14)};
-	font-weight: 400;
-	line-height: 1.75;
+	font-weight: 700;
+	line-height: 1;
 	letter-spacing: -${unit(0.32)};
 
-	min-width: ${({ $width }) => ($width ? unit($width) : 'auto')};
-	height: ${({ $height }) => ($height ? unit($height) : 'auto')};
-	padding: 0 ${unit(18)};
+	min-width: ${({ $width, $fullWidth }) => ($fullWidth ? '100%' : resolveUnit($width, 'auto'))};
+	height: ${({ $height }) => resolveUnit($height, 'auto')};
+	transition: box-shadow 0.22s ease, background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, opacity 0.22s ease;
+	white-space: nowrap;
 
 	&:hover {
-		cursor: pointer;
+		cursor: ${({ disabled }) => (disabled ? 'default' : 'pointer')};
+	}
+
+	&:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 ${unit(6)} ${unit(14)} rgba(26, 43, 89, 0.14);
+	}
+
+	&:active:not(:disabled) {
+		transform: translateY(0);
+		box-shadow: 0 ${unit(3)} ${unit(8)} rgba(26, 43, 89, 0.12);
+	}
+
+	&:disabled {
+		opacity: 0.7;
 	}
 `;

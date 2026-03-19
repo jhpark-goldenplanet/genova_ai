@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+import Button from '@/components/Button';
+import * as ModalS from '@/components/Modal/styled';
 import * as S from '../styled';
 
 import { SubmitHandler, useForm } from 'react-hook-form';
@@ -87,7 +89,11 @@ export default function InsertLinkModal({ setIsBusy, onClose }: Props) {
 
 	return (
 		<S.InsertLinkForm onSubmit={handleSubmit(onSubmit)}>
-			<h3>링크 삽입</h3>
+			<ModalS.SharedModalHeader>
+				<ModalS.SharedModalTitle as="h3">링크 삽입</ModalS.SharedModalTitle>
+				<ModalS.SharedModalDescription>YouTube URL 또는 일반 링크를 입력해 영상을 불러옵니다.</ModalS.SharedModalDescription>
+			</ModalS.SharedModalHeader>
+
 			<S.LinkInput
 				{...register('input', {
 					required: '링크를 입력해주세요.',
@@ -102,12 +108,14 @@ export default function InsertLinkModal({ setIsBusy, onClose }: Props) {
 
 			{errors.input && <S.ErrorMessage>{errors.input.message}</S.ErrorMessage>}
 
-			<S.LinkInsertButtonWrapper error={!isValidUrl}>
-				<button type="button" onClick={onClose}>
+			<ModalS.SharedModalFooter>
+				<Button type="button" status="neutral_outlined" onClick={onClose} width={88}>
 					취소
-				</button>
-				<button type="submit">적용</button>
-			</S.LinkInsertButtonWrapper>
+				</Button>
+				<Button type="submit" status="primary" width={88} disabled={!isValidUrl}>
+					적용
+				</Button>
+			</ModalS.SharedModalFooter>
 		</S.InsertLinkForm>
 	);
 }

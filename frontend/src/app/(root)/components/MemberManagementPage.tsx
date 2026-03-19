@@ -1,6 +1,8 @@
 'use client';
 
 import styled from '@emotion/styled';
+import Button from '@/components/Button';
+import * as ModalS from '@/components/Modal/styled';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { unit } from '@/shared/utils/base';
@@ -158,17 +160,20 @@ export default function MemberManagementPage() {
 					</S.MembersTableScroll>
 				</S.MembersTableCard>
 				<BottomActions>
-					<S.MembersRegisterButton type="button" onClick={openCreateModal}>
+					<Button type="button" status="primary" onClick={openCreateModal} width={96}>
 						멤버 추가
-					</S.MembersRegisterButton>
+					</Button>
 				</BottomActions>
 			</S.MembersPageBody>
 
 			{mounted && editingMember
 				? createPortal(
-						<S.MembersModalOverlay $closing={isModalClosing} onClick={closeModal}>
-							<S.MembersModal $closing={isModalClosing} onClick={(e) => e.stopPropagation()}>
-								<h3>{modalMode === 'create' ? '멤버 추가' : '회원 정보 수정'}</h3>
+						<ModalOverlay $closing={isModalClosing} onClick={closeModal}>
+							<ModalCard $closing={isModalClosing} onClick={(e) => e.stopPropagation()}>
+								<ModalS.SharedModalHeader>
+									<ModalS.SharedModalTitle>{modalMode === 'create' ? '멤버 추가' : '회원 정보 수정'}</ModalS.SharedModalTitle>
+									<ModalS.SharedModalDescription>멤버 기본 정보와 역할, 토큰 사용량을 관리합니다.</ModalS.SharedModalDescription>
+								</ModalS.SharedModalHeader>
 								<S.MembersFormGrid>
 									<S.MembersField>
 										<span>등록일</span>
@@ -199,16 +204,16 @@ export default function MemberManagementPage() {
 										<input value={editingMember.usedTokens} onChange={(e) => updateEditingField('usedTokens', e.target.value)} />
 									</S.MembersField>
 								</S.MembersFormGrid>
-								<S.MembersModalActions>
-									<button type="button" className="cancel" onClick={closeModal}>
+								<ModalS.SharedModalFooter>
+									<Button type="button" status="neutral_outlined" onClick={closeModal} width={84}>
 										취소
-									</button>
-									<button type="button" className="save" onClick={handleSave}>
+									</Button>
+									<Button type="button" status="primary" onClick={handleSave} width={84}>
 										저장
-									</button>
-								</S.MembersModalActions>
-							</S.MembersModal>
-						</S.MembersModalOverlay>,
+									</Button>
+								</ModalS.SharedModalFooter>
+							</ModalCard>
+						</ModalOverlay>,
 						document.body,
 					)
 				: null}
@@ -257,4 +262,10 @@ const SummaryCard = styled.div`
 const BottomActions = styled.div`
 	display: flex;
 	justify-content: flex-end;
+`;
+
+const ModalOverlay = styled(ModalS.SharedModalOverlay)``;
+
+const ModalCard = styled(ModalS.SharedModalPanel)`
+	width: min(${unit(560)}, calc(100vw - ${unit(32)}));
 `;

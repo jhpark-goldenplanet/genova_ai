@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import styled from '@emotion/styled';
+import Button from '@/components/Button';
 import { useAuth } from '@/context/AuthContext';
 import { unit } from '@/shared/utils/base';
 import { successToast } from '@/shared/utils/toastUtils';
@@ -34,7 +35,9 @@ export default function SettingsPage() {
 			<FormCard onSubmit={onSubmit}>
 				<label htmlFor="nickname">닉네임</label>
 				<input id="nickname" value={nextNickname} onChange={(e) => onChangeNickname(e.target.value)} placeholder="닉네임 입력" />
-				<button type="submit">저장</button>
+				<Button type="submit" status="primary" width={92}>
+					저장
+				</Button>
 			</FormCard>
 		</Page>
 	);
@@ -83,17 +86,5 @@ const FormCard = styled.form`
 		padding: 0 ${unit(12)};
 		font-size: ${unit(14)};
 		color: rgba(30, 47, 80, 1);
-	}
-
-	button {
-		margin-top: ${unit(10)};
-		width: fit-content;
-		border: none;
-		background: rgba(41, 85, 168, 1);
-		color: white;
-		border-radius: ${unit(8)};
-		padding: ${unit(10)} ${unit(16)};
-		font-weight: 700;
-		cursor: pointer;
 	}
 `;

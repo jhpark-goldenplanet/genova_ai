@@ -27,6 +27,8 @@ export type CustomSetState<T> = Dispatch<SetStateAction<T>>;
 export type ButtonStatus =
 	| 'primary'
 	| 'primary_outlined'
+	| 'neutral'
+	| 'neutral_outlined'
 	| 'secondary'
 	| 'secondary_outlined'
 	| 'third'

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import logo_icon from '@images/logo_icon.png';
 import GoogleSignIn from './GoogleSignIn';
+import Button from '@/components/Button';
 import { useAuth } from '@/context/AuthContext';
 import * as S from '@/app/(root)/styled';
 import styled from '@emotion/styled';
@@ -92,9 +93,17 @@ export default function LoginPage() {
 						}}
 					/>
 					<ButtonRow>
-						<LoginButton type="button" onClick={onLoginClick} disabled={loading || !watchId || !watchPassword}>
+						<Button
+							type="button"
+							status="primary"
+							size="md"
+							fullWidth
+							onClick={onLoginClick}
+							disabled={loading || !watchId || !watchPassword}
+							style={{ height: unit(40), borderRadius: unit(4), background: '#4f75db' }}
+						>
 							{loading ? '로그인 중...' : '로그인'}
-						</LoginButton>
+						</Button>
 						<GoogleSignIn fullHeight={40} />
 					</ButtonRow>
 				</Form>
@@ -200,28 +209,6 @@ const ButtonRow = styled.div`
 	align-items: stretch;
 	gap: ${unit(12)};
 	width: 100%;
-`;
-
-const LoginButton = styled.button`
-	width: 100%;
-	height: ${unit(40)};
-	border-radius: ${unit(4)};
-	border: 0;
-	background: #4f75db;
-	color: white;
-	font-size: ${unit(14)};
-	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.2s;
-
-	&:hover:not(:disabled) {
-		opacity: 0.92;
-	}
-
-	&:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
 `;
 
 const ErrorMessage = styled.div`

@@ -1,5 +1,7 @@
 'use client';
 
+import Button from '@/components/Button';
+import * as ModalS from '@/components/Modal/styled';
 import * as S from '../styled';
 
 import { SubmitHandler, useForm } from 'react-hook-form';
@@ -107,7 +109,10 @@ export default function AddThumbnailModal({ onSelectThumbnail, onClose }: Props)
 	return (
 		<S.AddThumbnailContainer {...getRootProps()}>
 			<input {...getInputProps()} />
-			<h3>{`썸네일을 등록해주세요`}</h3>
+			<ModalS.SharedModalHeader>
+				<ModalS.SharedModalTitle as="h3">썸네일을 등록해주세요</ModalS.SharedModalTitle>
+				<ModalS.SharedModalDescription>분할 다운로드에 사용할 대표 이미지를 업로드할 수 있습니다.</ModalS.SharedModalDescription>
+			</ModalS.SharedModalHeader>
 
 			<S.DragAndDropWrapper isDragActive={isDragActive} onSubmit={handleSubmit(onSubmit)}>
 				<h5>업로드할 파일 놓기</h5>
@@ -124,12 +129,14 @@ export default function AddThumbnailModal({ onSelectThumbnail, onClose }: Props)
 				/>
 			</S.DragAndDropWrapper>
 
-			<S.LinkInsertButtonWrapper>
-				<button type="button" onClick={onClose}>
+			<ModalS.SharedModalFooter>
+				<Button type="button" status="neutral_outlined" onClick={onClose} width={84}>
 					취소
-				</button>
-				<button
+				</Button>
+				<Button
 					type="button"
+					status="primary"
+					width={84}
 					onClick={() => {
 						confirm({
 							message: '썸네일을 추가하지 않고 진행하시겠습니까?',
@@ -142,8 +149,8 @@ export default function AddThumbnailModal({ onSelectThumbnail, onClose }: Props)
 					}}
 				>
 					적용
-				</button>
-			</S.LinkInsertButtonWrapper>
+				</Button>
+			</ModalS.SharedModalFooter>
 		</S.AddThumbnailContainer>
 	);
 }

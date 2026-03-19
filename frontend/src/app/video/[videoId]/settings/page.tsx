@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import styled from '@emotion/styled';
+import Button from '@/components/Button';
 import { unit } from '@/shared/utils/base';
 import { successToast } from '@/shared/utils/toastUtils';
 import VideoDetailLayout from '../detail-layout';
@@ -154,9 +155,9 @@ export default function SettingsPage() {
 						<h2>분석 설정</h2>
 						<p>프롬프트와 분할 개수를 조정한 뒤 저장하거나 새 분석으로 재생성할 수 있습니다.</p>
 					</div>
-					<PrimaryButton type="button" onClick={() => router.push(`/video/${videoId}/summary`)}>
+					<Button type="button" status="primary" onClick={() => router.push(`/video/${videoId}/summary`)} width={92}>
 						요약 보기
-					</PrimaryButton>
+					</Button>
 				</Header>
 
 				{selectedWork ? (
@@ -219,20 +220,20 @@ export default function SettingsPage() {
 						</Section>
 
 						<ActionRow>
-							<SecondaryButton type="button" onClick={updateCurrentAnalysis}>
+							<Button type="button" status="neutral_outlined" onClick={updateCurrentAnalysis} width={128}>
 								현재 작업 설정 저장
-							</SecondaryButton>
-							<PrimaryButton type="button" onClick={createNewAnalysis}>
+							</Button>
+							<Button type="button" status="primary" onClick={createNewAnalysis} width={128}>
 								새 분석으로 재생성
-							</PrimaryButton>
+							</Button>
 						</ActionRow>
 					</>
 				) : (
 					<Empty>
 						<p>연결된 작업이 없습니다.</p>
-						<SecondaryButton type="button" onClick={() => router.push('/workspace')}>
+						<Button type="button" status="neutral_outlined" onClick={() => router.push('/workspace')} width={124}>
 							작업목록으로 이동
-						</SecondaryButton>
+						</Button>
 					</Empty>
 				)}
 			</Page>
@@ -327,28 +328,6 @@ const ActionRow = styled.div`
 	display: flex;
 	justify-content: flex-end;
 	gap: ${unit(8)};
-`;
-
-const PrimaryButton = styled.button`
-	border: none;
-	background: rgba(41, 85, 168, 1);
-	color: white;
-	border-radius: ${unit(8)};
-	padding: ${unit(9)} ${unit(12)};
-	font-size: ${unit(13)};
-	font-weight: 700;
-	cursor: pointer;
-`;
-
-const SecondaryButton = styled.button`
-	border: 1px solid rgba(194, 208, 229, 1);
-	background: white;
-	color: rgba(43, 62, 98, 1);
-	border-radius: ${unit(8)};
-	padding: ${unit(9)} ${unit(12)};
-	font-size: ${unit(13)};
-	font-weight: 700;
-	cursor: pointer;
 `;
 
 const Empty = styled.section`
