@@ -22,8 +22,9 @@
 ### Google Cloud AI 서비스
 | 기술 | 용도 |
 |------|------|
-| Vertex AI (Gemini) | 영상 분석, 요약, 스크립트 생성, 구간 분할 |
+| Vertex AI (Gemini) | Premium: 영상 전체 분석 / Standard: 텍스트 기반 요약·분석 |
 | Google GenAI SDK | Gemini API Key 방식 호출 |
+| STT (Speech-to-Text) | Standard 모드: 음성 → 텍스트 추출 (토큰 비용 최적화) |
 | Cloud Translation API v2 | 다국어 번역 (ko, en, ja, zh) |
 
 ### 영상 & 미디어 처리
