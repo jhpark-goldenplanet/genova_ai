@@ -45,7 +45,7 @@ echo -e "${GREEN}[2/3] Submitting build to Cloud Build...${NC}"
 echo "This may take 5-10 minutes..."
 echo ""
 
-gcloud builds submit --config=cloudbuild.yaml --project="$PROJECT_ID"
+gcloud builds submit .. --config=frontend/cloudbuild.yaml --project="$PROJECT_ID"
 
 echo ""
 echo -e "${GREEN}[3/3] Deployment completed!${NC}"

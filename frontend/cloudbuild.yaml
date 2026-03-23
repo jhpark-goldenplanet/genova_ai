@@ -19,9 +19,11 @@ steps:
       - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}'
+      - '-f'
+      - 'frontend/Dockerfile'
       - '-t'
       - 'gcr.io/$PROJECT_ID/genova-frontend:latest'
-      - '.'
+      - 'frontend'
 
   # 이미지를 GCR에 푸시
   - name: 'gcr.io/cloud-builders/docker'
@@ -47,8 +49,6 @@ steps:
       - '--min-instances=0'
       - '--max-instances=10'
       - '--set-env-vars=CORS_ORIGINS=https://genova.genaion.net'
-      - '--no-traffic'
-      - '--tag=develop'
 
 images:
   - 'gcr.io/$PROJECT_ID/genova-frontend:latest'

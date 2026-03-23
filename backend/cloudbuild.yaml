@@ -5,11 +5,11 @@ steps:
       - 'build'
       - '--platform'
       - 'linux/amd64'
+      - '-f'
+      - 'backend/Dockerfile'
       - '-t'
       - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/genova-ai/backend:latest'
-      - '-f'
-      - 'Dockerfile'
-      - '.'
+      - 'backend'
 
   # 이미지를 Artifact Registry에 푸시
   - name: 'gcr.io/cloud-builders/docker'

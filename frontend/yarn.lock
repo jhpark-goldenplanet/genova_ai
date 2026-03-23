@@ -2069,6 +2069,8 @@ __metadata:
     firebase: "npm:^12.5.0"
     lodash-es: "npm:^4.17.21"
     next: "npm:14.2.25"
+    overlayscrollbars: "npm:^2.14.0"
+    overlayscrollbars-react: "npm:^0.5.6"
     prettier: "npm:^3.4.2"
     react: "npm:^18"
     react-dom: "npm:^18"
@@ -4979,6 +4981,23 @@ __metadata:
     type-check: "npm:^0.4.0"
     word-wrap: "npm:^1.2.5"
   checksum: 10c0/4afb687a059ee65b61df74dfe87d8d6815cd6883cb8b3d5883a910df72d0f5d029821f37025e4bccf4048873dbdb09acc6d303d27b8f76b1a80dd5a7d5334675
+  languageName: node
+  linkType: hard
+
+"overlayscrollbars-react@npm:^0.5.6":
+  version: 0.5.6
+  resolution: "overlayscrollbars-react@npm:0.5.6"
+  peerDependencies:
+    overlayscrollbars: ^2.0.0
+    react: ">=16.8.0"
+  checksum: 10c0/59a2aad3664d81dc4dee5e747b72bb2645047e0e6d300d9583244167d1e4b19c4cc263932e4b112d5c24358430f78d15d34ea389beb8845e3b5319ccc57db8d8
+  languageName: node
+  linkType: hard
+
+"overlayscrollbars@npm:^2.14.0":
+  version: 2.14.0
+  resolution: "overlayscrollbars@npm:2.14.0"
+  checksum: 10c0/e08d188733032aadb258b6ddf56249c6747b7e5ac745dd34ae402320a5f8d4cd832a3a73baff29f8a64a6faf334be719617725972fab8c29fb708a9fd96bc3e8
   languageName: node
   linkType: hard
 

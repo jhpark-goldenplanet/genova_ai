@@ -1,0 +1,62 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=https://genova-ai-backend-develop-987680405347.asia-northeast3.run.app'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_KEY=${_NEXT_PUBLIC_API_KEY}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}'
+      - '-f'
+      - 'frontend/Dockerfile'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/genova-frontend-develop:latest'
+      - 'frontend'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/genova-frontend-develop:latest'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - 'gcloud'
+      - 'run'
+      - 'deploy'
+      - 'genova-frontend-develop'
+      - '--image=gcr.io/$PROJECT_ID/genova-frontend-develop:latest'
+      - '--platform=managed'
+      - '--region=asia-northeast3'
+      - '--allow-unauthenticated'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--timeout=300'
+      - '--concurrency=80'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--set-env-vars=CORS_ORIGINS=https://genova-frontend-develop-987680405347.asia-northeast3.run.app'
+
+images:
+  - 'gcr.io/$PROJECT_ID/genova-frontend-develop:latest'
+
+substitutions:
+  _NEXT_PUBLIC_API_KEY: 'nn1ezEkJImlE+/kj1vCqvhSS+6i41+caXIXat1Y7AMo='
+  _NEXT_PUBLIC_FIREBASE_API_KEY: 'AIzaSyA2HOaStGSfquR7e1NlPp7LglLtqvTQXCs'
+  _NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'genova-ai-project.firebaseapp.com'
+  _NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'genova-ai-project'
+  _NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: 'genova-ai-project.firebasestorage.app'
+  _NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '987680405347'
+  _NEXT_PUBLIC_FIREBASE_APP_ID: '1:987680405347:web:de155bc342c02608c50556'
+
+timeout: 1200s

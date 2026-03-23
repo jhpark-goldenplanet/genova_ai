@@ -220,7 +220,7 @@ export const AddThumbnailContainer = styled.article`
 	width: min(${unit(560)}, calc(100vw - ${unit(32)}));
 	border-radius: ${unit(14)};
 	background: white;
-	border: 1px solid rgba(222, 229, 237, 1);
+	// border: 1px solid rgba(222, 229, 237, 1);
 	padding: ${unit(24)};
 	animation: ${thumbnailModalFadeSlideIn} 0.22s ease forwards;
 

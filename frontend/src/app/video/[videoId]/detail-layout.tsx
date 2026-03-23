@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import styled from '@emotion/styled';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useModal } from '@/shared/hooks';
 import { unit } from '@/shared/utils/base';
 
@@ -135,7 +136,18 @@ export default function VideoDetailLayout({ children, title = '작업 상세' }:
 				</TabBar>
 			</Header>
 
-			<Content>{children}</Content>
+			<Content
+				defer
+				options={{
+					scrollbars: {
+						autoHide: 'leave',
+						autoHideDelay: 180,
+						theme: 'os-theme-genova',
+					},
+				}}
+			>
+				{children}
+			</Content>
 		</Wrap>
 	);
 }
@@ -261,11 +273,23 @@ const TabButton = styled.button<{ $active: boolean }>`
 	}
 `;
 
-const Content = styled.section`
+const Content = styled(OverlayScrollbarsComponent)`
 	flex: 1;
 	min-height: 0;
-	overflow: hidden;
 	padding-top: ${unit(8)};
+
+	.os-scrollbar {
+		--os-size: ${unit(7)};
+		--os-padding-axis: ${unit(2)};
+		--os-handle-bg: linear-gradient(180deg, rgba(150, 173, 214, 1) 0%, rgba(101, 132, 193, 1) 100%);
+		--os-handle-bg-hover: linear-gradient(180deg, rgba(162, 185, 224, 1) 0%, rgba(112, 142, 201, 1) 100%);
+		--os-handle-bg-active: linear-gradient(180deg, rgba(128, 153, 206, 1) 0%, rgba(88, 121, 191, 1) 100%);
+		--os-track-bg: rgba(233, 239, 248, 0.92);
+	}
+
+	.os-scrollbar-handle {
+		border-radius: ${unit(999)};
+	}
 `;
 
 const PromptModalCard = styled.section`

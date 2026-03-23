@@ -1,6 +1,7 @@
 'use client';
 
 import globalStyles from '@/styles/globalReset';
+import 'overlayscrollbars/styles/overlayscrollbars.css';
 import { keepPreviousData, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Global } from '@emotion/react';
 import { useAlertStore, useConfirmStore, useFreeModalStore } from '@/shared/store';

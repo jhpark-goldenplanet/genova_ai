@@ -16,6 +16,7 @@ Genova AI는  동영상을 분석하여 자동으로 자막 생성, 요약, 구�
 
 ```
 genova-ai/
+├── cmd/               # 자주 쓰는 작업 명령 스크립트
 ├── frontend/          # Next.js 프론트엔드
 ├── backend/           # FastAPI 백엔드
 ├── docs/              # 문서 및 인수인계 자료
@@ -38,6 +39,11 @@ cd genova-ai
 #### 2. 로컬 인프라 실행 (PostgreSQL, Redis)
 ```bash
 ./setup-local-env.sh
+```
+
+#### 2-1. 원클릭 개발환경 실행
+```bash
+./cmd/dev_start.sh
 ```
 
 #### 3. 백엔드 실행
@@ -117,14 +123,16 @@ cd backend
 ## 📚 문서
 
 ### 환경 설정
-- [로컬 개발 환경 설정](./docs/LOCAL_SETUP_GUIDE.md)
+- [로컬 개발 환경 설정](./docs/infra/LOCAL_SETUP_GUIDE.md)
 
 ### Dev 환경 인수인계
-- [Backend Dev 환경 가이드](./docs/DEV_BACKEND_GUIDE.md)
-- [Frontend Dev 환경 가이드](./docs/DEV_FRONTEND_GUIDE.md)
-- [GCP 인프라 및 네트워크 가이드](./docs/DEV_INFRASTRUCTURE_GUIDE.md)
+- [Backend Dev 환경 가이드](./docs/backend/DEV_BACKEND_GUIDE.md)
+- [Frontend Dev 환경 가이드](./docs/frontend/DEV_FRONTEND_GUIDE.md)
+- [GCP 인프라 및 네트워크 가이드](./docs/infra/DEV_INFRASTRUCTURE_GUIDE.md)
+- [브랜치 기반 자동 배포 가이드](./docs/infra/BRANCH_DEPLOYMENT_GUIDE.md)
 
 ### 기타
+- [문서 구조 안내](./docs/README.md)
 - [인수인계 체크리스트](./docs/todo.md)
 - [프론트엔드 README](./frontend/README.md)
 - [백엔드 README](./backend/README.md)
