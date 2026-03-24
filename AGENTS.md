@@ -4,7 +4,7 @@
 - 최우선: 이 파일에서 지정한 규칙을 따른다.
 - 사용자가 `역할 기획`, `역할 화면개발`, `역할 기능개발`, `역할 리팩토링` 중 하나를 말하면, 별도 지시가 없어도 공통 규칙과 해당 역할 문서를 자동으로 참조한다.
 - 다음: 멀티터미널 작업 중이면 `docs/progress/`에서 현재 점유 중인 작업을 먼저 확인한다.
-- 다음: Codex 작업 기준 문서(`docs/agent/CODEX_WORKFLOW.md`, `docs/agent/CODEX_RULES.md`)가 있으면 먼저 확인한다.
+- 다음: Claude Code 작업 기준 문서(`docs/agent/CLAUDE_WORKFLOW.md`, `docs/agent/CLAUDE_RULES.md`)가 있으면 먼저 확인한다.
 - 다음: 역할이 지정된 세션이면 `docs/agent/roles/`의 해당 역할 문서를 확인한다.
 - 다음: 큰 방향이나 다음 우선순위가 필요하면 `docs/plan/INDEX.md`를 확인한다.
 - 다음: 프로젝트 문서 (`README`, `docs/*`)를 확인한다.

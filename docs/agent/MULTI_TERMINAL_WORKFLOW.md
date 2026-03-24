@@ -1,6 +1,6 @@
 # Multi Terminal Workflow
 
-여러 Codex 터미널을 병렬로 사용할 때의 기본 운영 방식이다.
+여러 Claude Code 터미널을 병렬로 사용할 때의 기본 운영 방식이다.
 
 ## 목적
 

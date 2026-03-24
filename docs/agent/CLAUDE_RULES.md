@@ -1,6 +1,6 @@
-# Codex Rules
+# Claude Code Rules
 
-이 문서는 현재 작업자의 Codex 사용 스타일을 프로젝트 규칙으로 고정하기 위한 초안입니다.
+이 문서는 현재 작업자의 Claude Code 사용 스타일을 프로젝트 규칙으로 고정하기 위한 초안입니다.
 
 ## 기본 원칙
 
@@ -12,7 +12,7 @@
 ## 문서 원칙
 
 - 프로젝트 설명 문서는 `docs/`에 유지한다.
-- Codex 운영 규칙은 이 문서와 `docs/agent/CODEX_WORKFLOW.md`에만 기록한다.
+- Claude Code 운영 규칙은 이 문서와 `docs/agent/CLAUDE_WORKFLOW.md`에만 기록한다.
 - 특정 에이전트 전용 규칙은 다른 운영 문서와 분리한다.
 
 ## 초안 메모

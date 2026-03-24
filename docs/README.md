@@ -3,7 +3,7 @@
 ## 구조
 
 - `CONVENTIONS.md`: 프론트/백엔드 공통 개발 컨벤션 (Git, 코딩, API 계약)
-- `agent/`: Codex 작업 흐름과 운영 규칙
+- `agent/`: Claude Code 작업 흐름과 운영 규칙
 - `backend/`: API, DB 스키마, 백엔드 개발 가이드
 - `done/`: 완료한 작업 기록과 후속 메모
 - `frontend/`: 프론트엔드 개발 가이드
