@@ -11,7 +11,6 @@
 - 병렬 세션은 역할 문서를 기준으로 역할을 분리한다.
 - 현재 진행 중인 작업은 `docs/progress/`에서 관리한다.
 - 완료 후 필요한 후속 작업은 다시 이 문서에 반영한다.
-- 완료 항목은 삭제하지 않고 `완료` 상태만 유지한다.
 - 완료 상세 설명은 `docs/done/`에서 관리한다.
 
 ## 문서 역할
@@ -22,19 +21,12 @@
 
 ## 로드맵 문서
 
-- [Service Roadmap](./service-roadmap.md)
-- [Local Demo Build Plan](./local-demo-build.md)
-- [Service Status Report](./service-status-report.md)
+- [Service Roadmap](./service-roadmap.md) — 기능별 구현 상태와 미구현 항목
+- [Service Status Report](./service-status-report.md) — 서비스 관점 현황과 SaaS 전환 과제
+- [Analysis Mode Dual Track](./analysis-mode-dual-track.md) — Standard/Premium 분석 모드 기획
 
-## 우선순위 템플릿
+## 우선순위
 
-- P1:
-- P2:
-- P3:
-
-## 다음에 반영할 것
-
-- 기능 구현 완료 후 이어질 UI 정리 항목
-- 리팩터링 후보
-- 공통 컴포넌트화 후보
-- 문서 정비 후보
+- P1: 분석 모드 이중화 (Standard/Premium) 프론트 구현
+- P1: 워크스페이스/분석 흐름의 백엔드 연동
+- P2: 관리 화면 실데이터 연동
