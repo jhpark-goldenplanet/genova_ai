@@ -6,6 +6,7 @@ import * as ModalS from '@/components/Modal/styled';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { unit } from '@/shared/utils/base';
+import { readTokenState, getRemaining, getMemberUsage } from '@/shared/utils/tokenState';
 import * as S from '../styled';
 
 interface MemberRow {
@@ -18,20 +19,22 @@ interface MemberRow {
 }
 
 const ORG_MEMBER_LIMIT = 35;
-const ORG_TOKEN_LIMIT = 50000;
 
-const SAMPLE_MEMBERS: MemberRow[] = [
-	{ id: 'njw_admin', organization: '농정원', name: '김민지', role: '관리자', usedTokens: 120, createdAt: '2026-03-02' },
-	{ id: 'njw_editor_01', organization: '농정원', name: '박지훈', role: '편집자', usedTokens: 146, createdAt: '2026-03-01' },
-	{ id: 'gp_hklee', organization: '골든플래닛', name: '이형근', role: '관리자', usedTokens: 98, createdAt: '2026-02-28' },
-	{ id: 'njw_viewer_02', organization: '농정원', name: '정유진', role: '뷰어', usedTokens: 112, createdAt: '2026-02-25' },
-];
+const buildSampleMembers = (): MemberRow[] => {
+	const ts = readTokenState();
+	return [
+		{ id: 'njw_admin', organization: '농정원', name: '김민지', role: '관리자', usedTokens: getMemberUsage(ts, 'njw_admin'), createdAt: '2026-03-02' },
+		{ id: 'njw_editor_01', organization: '농정원', name: '박지훈', role: '편집자', usedTokens: getMemberUsage(ts, 'njw_editor_01'), createdAt: '2026-03-01' },
+		{ id: 'gp_hklee', organization: '골든플래닛', name: '이형근', role: '관리자', usedTokens: getMemberUsage(ts, 'gp_hklee'), createdAt: '2026-02-28' },
+		{ id: 'njw_viewer_02', organization: '농정원', name: '정유진', role: '뷰어', usedTokens: getMemberUsage(ts, 'njw_viewer_02'), createdAt: '2026-02-25' },
+	];
+};
 
 const formatTokens = (usedTokens: number) => `${usedTokens.toLocaleString()} Tokens`;
 const MODAL_ANIMATION_MS = 220;
 
 export default function MemberManagementPage() {
-	const [members, setMembers] = useState<MemberRow[]>(SAMPLE_MEMBERS);
+	const [members, setMembers] = useState<MemberRow[]>(() => buildSampleMembers());
 	const [modalMode, setModalMode] = useState<'create' | 'edit'>('edit');
 	const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 	const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
@@ -46,6 +49,8 @@ export default function MemberManagementPage() {
 		};
 	}, []);
 
+	const tokenState = useMemo(() => readTokenState(), []);
+	const orgTokenLimit = tokenState.org.monthlyLimit;
 	const sortedMembers = useMemo(() => {
 		return [...members].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 	}, [members]);
@@ -123,7 +128,7 @@ export default function MemberManagementPage() {
 							<SummaryCard>
 								<span>누적 토큰 사용량</span>
 								<strong>
-									{totalUsedTokens.toLocaleString()}/{ORG_TOKEN_LIMIT.toLocaleString()}
+									{totalUsedTokens.toLocaleString()}/{orgTokenLimit.toLocaleString()}
 								</strong>
 							</SummaryCard>
 						</SummaryRow>

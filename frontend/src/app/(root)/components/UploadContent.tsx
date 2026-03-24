@@ -10,7 +10,7 @@ import { SubmitHandler, useForm } from 'react-hook-form';
 import { ACCEPTED_VIDEO_TYPES, validateFileTypes } from '../helper';
 import { getUploadUrl, uploadToGCS, confirmUpload, analyzeVideo } from '@/shared/apis/video';
 import Loader from '@/components/Loader';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from '@emotion/styled';
 import { keyframes } from '@emotion/react';
 import { unit } from '@/shared/utils/base';
@@ -18,8 +18,11 @@ import { NAVBAR_WIDTH } from '@/shared/constants';
 import AnimatedSelect from '@/components/AnimatedSelect';
 import { Id, toast } from 'react-toastify';
 import { useGetStatusProgressSummary } from '@/shared/hooks/queries/video';
+import { estimateTokens, parseDurationToSeconds } from '@/shared/utils/tokenEstimate';
+import { readTokenState, getRemaining, getMemberUsage, deductTokens } from '@/shared/utils/tokenState';
 
 type AnalysisMode = 'AUTO' | 'CUSTOM';
+type AnalysisTrack = 'STANDARD' | 'PREMIUM';
 type FlowStep = 'UPLOAD' | 'CONFIGURE' | 'READY' | 'DONE';
 type ProcessStage = 'UPLOAD' | 'CONFIGURE' | 'ANALYZE' | 'DONE';
 
@@ -50,6 +53,7 @@ interface WorkspaceAnalysisItem {
 	promptText?: string;
 	splitCount?: number;
 	mode?: AnalysisMode;
+	track?: AnalysisTrack;
 }
 
 interface WorkspaceWorkItem {
@@ -183,6 +187,8 @@ export default function UploadContent() {
 	const [flowStep, setFlowStep] = useState<FlowStep>('UPLOAD');
 	const [viewStep, setViewStep] = useState<FlowStep>('UPLOAD');
 	const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('AUTO');
+	const [analysisTrack, setAnalysisTrack] = useState<AnalysisTrack>('STANDARD');
+	const [configureSubStep, setConfigureSubStep] = useState<1 | 2>(1);
 	const [presetName, setPresetName] = useState('기본 요약');
 	const [splitCountValue, setSplitCountValue] = useState('5');
 	const [durationLabel, setDurationLabel] = useState('-');
@@ -211,6 +217,15 @@ export default function UploadContent() {
 	const entryMode = searchParams.get('mode') ?? 'project';
 	const entryWorkId = searchParams.get('workId');
 	const entryAnalysisId = searchParams.get('analysisId');
+	const durationSeconds = useMemo(() => parseDurationToSeconds(durationLabel), [durationLabel]);
+	const tokenEstimate = useMemo(() => estimateTokens(durationSeconds), [durationSeconds]);
+	const [tokenStateVersion, setTokenStateVersion] = useState(0);
+	const tokenState = useMemo(() => readTokenState(), [tokenStateVersion]);
+	const orgRemaining = getRemaining(tokenState);
+	const myUsage = getMemberUsage(tokenState, 'gp_hklee');
+	const selectedEstimate = analysisTrack === 'STANDARD' ? tokenEstimate.standard : tokenEstimate.premium;
+	const isTokenInsufficient = durationSeconds > 0 && orgRemaining < selectedEstimate;
+
 	const analysisStatusVideoId = flowStep === 'READY' || flowStep === 'DONE' ? uploadedVideo?.videoId : undefined;
 	const { data: analysisStatusResult } = useGetStatusProgressSummary(analysisStatusVideoId);
 	const analysisProgress = analysisStatusResult?.progress ?? 0;
@@ -268,6 +283,8 @@ export default function UploadContent() {
 				setViewStep(draft.flowStep);
 			}
 			if (draft?.analysisMode) setAnalysisMode(draft.analysisMode);
+			if (draft?.analysisTrack) setAnalysisTrack(draft.analysisTrack);
+			if (draft?.configureSubStep === 1 || draft?.configureSubStep === 2) setConfigureSubStep(draft.configureSubStep);
 			if (typeof draft?.presetName === 'string') setPresetName(draft.presetName);
 			if (typeof draft?.splitCountValue === 'string') setSplitCountValue(draft.splitCountValue);
 			if (typeof draft?.durationLabel === 'string') setDurationLabel(draft.durationLabel);
@@ -375,6 +392,8 @@ export default function UploadContent() {
 			flowStep,
 			viewStep,
 			analysisMode,
+			analysisTrack,
+			configureSubStep,
 			presetName,
 			splitCountValue,
 			durationLabel,
@@ -385,7 +404,7 @@ export default function UploadContent() {
 			createdAnalysisId,
 		};
 		window.localStorage.setItem(UPLOAD_FLOW_STORAGE_KEY, JSON.stringify(payload));
-	}, [flowStep, viewStep, analysisMode, presetName, splitCountValue, durationLabel, projectName, analysisName, selectedTags, uploadedVideo, createdAnalysisId]);
+	}, [flowStep, viewStep, analysisMode, analysisTrack, configureSubStep, presetName, splitCountValue, durationLabel, projectName, analysisName, selectedTags, uploadedVideo, createdAnalysisId]);
 
 	useEffect(() => {
 		if (flowStep !== 'READY') return;
@@ -602,6 +621,7 @@ export default function UploadContent() {
 				briefing: '분석 설정 진행 중입니다.',
 				keywords: selectedTags.slice(0, 5),
 				mode: analysisMode,
+				track: analysisTrack,
 				splitCount: analysisMode === 'AUTO' ? 0 : Number(splitCountValue || 5),
 			};
 
@@ -1107,6 +1127,7 @@ export default function UploadContent() {
 					promptText,
 					splitCount,
 					mode: analysisMode,
+					track: analysisTrack,
 				};
 				createdAnalysis = nextAnalysis;
 
@@ -1143,6 +1164,10 @@ export default function UploadContent() {
 				throw new Error('analysis creation failed');
 			}
 			setCreatedAnalysisId(createdAnalysis.id);
+			if (durationSeconds > 0) {
+				deductTokens('gp_hklee', createdAnalysis.id, analysisTrack, selectedEstimate);
+				setTokenStateVersion((v) => v + 1);
+			}
 			setFlowStep('READY');
 			setViewStep('READY');
 			successToast('실제 분석 진행 상태를 표시합니다.');
@@ -1190,9 +1215,10 @@ export default function UploadContent() {
 		},
 	});
 
+	const configureLabel = `설정 (${configureSubStep}/2)`;
 	const steps: { key: FlowStep; label: string }[] = [
 		{ key: 'UPLOAD', label: '영상 업로드' },
-		{ key: 'CONFIGURE', label: '설정' },
+		{ key: 'CONFIGURE', label: configureLabel },
 		{ key: 'READY', label: '분석' },
 		{ key: 'DONE', label: '완료' },
 	];
@@ -1204,7 +1230,6 @@ export default function UploadContent() {
 	};
 	const currentRank = rankMap[flowStep];
 	const stepProgress = `${((currentRank + 1) / steps.length) * 100}%`;
-	const viewedRank = rankMap[viewStep];
 	const showUploadStage = viewStep === 'UPLOAD';
 	const showConfigureStage = viewStep === 'CONFIGURE';
 	const showAnalysisStage = viewStep === 'READY';
@@ -1317,8 +1342,8 @@ export default function UploadContent() {
 								</StageSurface>
 							) : null}
 
-							{showConfigureStage ? (
-								<StageSurface key="configure-stage">
+							{showConfigureStage && configureSubStep === 1 ? (
+								<StageSurface key="configure-stage-1">
 									<ConfigureStageLayout>
 										<ConfigurePrimaryColumn>
 											<UploadCompleteCard $compact $fullWidth>
@@ -1455,6 +1480,165 @@ export default function UploadContent() {
 										</ConfigureSecondaryColumn>
 									</ConfigureStageLayout>
 									<ConfigureActionRow>
+										<ConfigureNextButton type="button" onClick={() => setConfigureSubStep(2)}>
+											<span>분석 모드 선택</span>
+											<ConfigureNextArrow aria-hidden="true">
+												<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+													<path d="M9 6L15 12L9 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+												</svg>
+											</ConfigureNextArrow>
+										</ConfigureNextButton>
+									</ConfigureActionRow>
+								</StageSurface>
+							) : null}
+
+							{showConfigureStage && configureSubStep === 2 ? (
+								<StageSurface key="configure-stage-2">
+									<ConfigureStageLayout>
+										<ConfigurePrimaryColumn>
+											<UploadCompleteCard $compact $fullWidth>
+												<VideoInfoName>{uploadedVideo?.filename ?? '-'}</VideoInfoName>
+												<MetaRow>
+													<span>길이 {durationLabel}</span>
+													<span>형식 {uploadedVideo?.contentType || 'video/mp4'}</span>
+													<span>용량 {uploadedVideo && uploadedVideo.fileSize > 0 ? `${(uploadedVideo.fileSize / (1024 * 1024)).toFixed(1)}MB` : '-'}</span>
+												</MetaRow>
+											</UploadCompleteCard>
+
+											<AnalysisConfigCard $fullWidth>
+												<ConfigTitle>분석 모드</ConfigTitle>
+												<TrackCardRow>
+													<TrackCard
+														type="button"
+														$active={analysisTrack === 'STANDARD'}
+														onClick={() => setAnalysisTrack('STANDARD')}
+													>
+														<TrackCardIcon>STT</TrackCardIcon>
+														<TrackCardTitle>Standard</TrackCardTitle>
+														<TrackCardDesc>음성 기반 분석</TrackCardDesc>
+														<TrackCardDesc>STT → AI 요약</TrackCardDesc>
+														<TrackCardBadge $variant="save">토큰 절약</TrackCardBadge>
+													</TrackCard>
+													<TrackCard
+														type="button"
+														$active={analysisTrack === 'PREMIUM'}
+														onClick={() => setAnalysisTrack('PREMIUM')}
+													>
+														<TrackCardIcon>HD</TrackCardIcon>
+														<TrackCardTitle>Premium</TrackCardTitle>
+														<TrackCardDesc>영상 전체 분석</TrackCardDesc>
+														<TrackCardDesc>OCR + 시각 분석</TrackCardDesc>
+														<TrackCardBadge $variant="quality">고품질 결과</TrackCardBadge>
+													</TrackCard>
+												</TrackCardRow>
+												<TrackHelpText>
+													{analysisTrack === 'STANDARD'
+														? '음성 중심 강의에 적합합니다. OCR·시각 정보는 미지원.'
+														: '화면 자료가 포함된 영상에 적합합니다. OCR·장면 전환까지 분석.'}
+												</TrackHelpText>
+											</AnalysisConfigCard>
+
+										</ConfigurePrimaryColumn>
+										<ConfigureSecondaryColumn>
+											<AnalysisConfigCard $fullWidth>
+												<ConfigTitle>예상 토큰 사용량</ConfigTitle>
+												<OrgTokenHeroRow>
+													<OrgTokenHeroNumber>
+														{durationSeconds > 0
+															? Math.max(0, orgRemaining - selectedEstimate).toLocaleString()
+															: orgRemaining.toLocaleString()}
+													</OrgTokenHeroNumber>
+													<OrgTokenHeroUnit>/ {tokenState.org.monthlyLimit.toLocaleString()} 토큰</OrgTokenHeroUnit>
+												</OrgTokenHeroRow>
+												<OrgTokenBarTrackLarge>
+													{durationSeconds > 0 ? (
+														<>
+															<OrgTokenBarAfter
+																style={{ width: `${Math.max(0, (orgRemaining - selectedEstimate) / tokenState.org.monthlyLimit) * 100}%` }}
+															/>
+															<OrgTokenBarDeduct
+																style={{ width: `${Math.min(selectedEstimate / tokenState.org.monthlyLimit, orgRemaining / tokenState.org.monthlyLimit) * 100}%` }}
+																$warning={isTokenInsufficient}
+															/>
+														</>
+													) : (
+														<OrgTokenBarAfter
+															style={{ width: `${(orgRemaining / tokenState.org.monthlyLimit) * 100}%` }}
+														/>
+													)}
+												</OrgTokenBarTrackLarge>
+												{durationSeconds > 0 ? (
+													<>
+														<OrgTokenBarLegend>
+															<OrgTokenLegendItem>
+																<OrgTokenLegendDot $color="rgba(80, 200, 170, 0.8)" />
+																<span>현재 보유량 {orgRemaining.toLocaleString()}</span>
+															</OrgTokenLegendItem>
+															<OrgTokenLegendItem>
+																<OrgTokenLegendDot $color="rgba(255, 100, 120, 0.9)" $pulse />
+																<span>예상 소모 {selectedEstimate.toLocaleString()} ({analysisTrack === 'STANDARD' ? 'STT' : 'HD'})</span>
+															</OrgTokenLegendItem>
+														</OrgTokenBarLegend>
+														<TokenCompareSection>
+															<TokenCompareSectionTitle>모드별 예상 사용량</TokenCompareSectionTitle>
+															<TokenBarGroup>
+																<TokenBarItem $active={analysisTrack === 'STANDARD'}>
+																	<TokenBarLabel>
+																		STT
+																		<TokenTooltipWrap data-tooltip={`· STT 처리 (Google STT): ~${tokenEstimate.standardSttCost.toLocaleString()}\n· AI 텍스트 분석 (Gemini): ~${tokenEstimate.standardGeminiCost.toLocaleString()}`}>
+																			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+																				<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+																				<path d="M9.5 9.5C9.5 8.12 10.62 7 12 7C13.38 7 14.5 8.12 14.5 9.5C14.5 10.88 13.38 12 12 12V13.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+																				<circle cx="12" cy="16.5" r="1" fill="currentColor" />
+																			</svg>
+																		</TokenTooltipWrap>
+																	</TokenBarLabel>
+																	<TokenBarTrack>
+																		<TokenBarFill
+																			style={{ width: `${Math.min((tokenEstimate.standard / tokenEstimate.premium) * 100, 100)}%` }}
+																			$active={analysisTrack === 'STANDARD'}
+																		/>
+																	</TokenBarTrack>
+																	<TokenBarValue>{tokenEstimate.standard.toLocaleString()}</TokenBarValue>
+																</TokenBarItem>
+																<TokenBarItem $active={analysisTrack === 'PREMIUM'}>
+																	<TokenBarLabel>HD</TokenBarLabel>
+																	<TokenBarTrack>
+																		<TokenBarFill
+																			style={{ width: '100%' }}
+																			$active={analysisTrack === 'PREMIUM'}
+																		/>
+																	</TokenBarTrack>
+																	<TokenBarValue>{tokenEstimate.premium.toLocaleString()}</TokenBarValue>
+																</TokenBarItem>
+															</TokenBarGroup>
+														</TokenCompareSection>
+													</>
+												) : null}
+												<OrgTokenMetaGridLarge>
+													<OrgTokenMetaRow>
+														<OrgTokenMetaLabelLg>내 사용량 (이번 달)</OrgTokenMetaLabelLg>
+														<OrgTokenMetaValueLg>{myUsage.toLocaleString()}</OrgTokenMetaValueLg>
+													</OrgTokenMetaRow>
+													<OrgTokenMetaRow>
+														<OrgTokenMetaLabelLg>갱신일</OrgTokenMetaLabelLg>
+														<OrgTokenMetaValueLg>{tokenState.org.resetDate}</OrgTokenMetaValueLg>
+													</OrgTokenMetaRow>
+													<OrgTokenMetaRow>
+														<OrgTokenMetaLabelLg>플랜</OrgTokenMetaLabelLg>
+														<OrgTokenMetaValueLg>{tokenState.org.plan}</OrgTokenMetaValueLg>
+													</OrgTokenMetaRow>
+												</OrgTokenMetaGridLarge>
+												{isTokenInsufficient ? (
+													<OrgTokenWarningBanner>잔여 토큰이 부족합니다. 관리자에게 문의하거나 플랜을 변경해 주세요.</OrgTokenWarningBanner>
+												) : null}
+											</AnalysisConfigCard>
+										</ConfigureSecondaryColumn>
+									</ConfigureStageLayout>
+									<ConfigureActionRow>
+										<ConfigurePrevButton type="button" onClick={() => setConfigureSubStep(1)}>
+											이전
+										</ConfigurePrevButton>
 										<StartAnalysisButton type="submit">분석 시작</StartAnalysisButton>
 									</ConfigureActionRow>
 								</StageSurface>
@@ -1926,6 +2110,7 @@ const ConfigureActionRow = styled.div`
 	width: min(${unit(1120)}, calc(100vw - ${unit(96)}));
 	display: flex;
 	justify-content: center;
+	gap: ${unit(12)};
 	margin-top: ${unit(20)};
 
 	@media screen and (max-width: 980px) {
@@ -2794,5 +2979,468 @@ const StartAnalysisButton = styled.button`
 	&:hover {
 		background: rgba(50, 96, 184, 1);
 		box-shadow: 0 ${unit(8)} ${unit(16)} rgba(24, 59, 126, 0.28);
+	}
+`;
+
+const TrackCardRow = styled.div`
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: ${unit(10)};
+`;
+
+const TrackCard = styled.button<{ $active: boolean }>`
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: ${unit(6)};
+	padding: ${unit(14)} ${unit(10)};
+	border-radius: ${unit(10)};
+	border: 1.5px solid ${({ $active }) => ($active ? 'rgba(120, 180, 255, 0.9)' : 'rgba(140, 170, 210, 0.4)')};
+	background: ${({ $active }) => ($active ? 'rgba(50, 100, 180, 0.35)' : 'rgba(30, 50, 90, 0.3)')};
+	cursor: pointer;
+	transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+	box-shadow: ${({ $active }) => ($active ? `0 0 ${unit(12)} rgba(100, 170, 255, 0.2)` : 'none')};
+
+	&:hover {
+		border-color: rgba(120, 180, 255, 0.7);
+		background: rgba(40, 80, 150, 0.3);
+	}
+`;
+
+const TrackCardIcon = styled.span`
+	font-size: ${unit(18)};
+	font-weight: 800;
+	color: rgba(160, 200, 255, 1);
+	letter-spacing: 0.5px;
+`;
+
+const TrackCardTitle = styled.strong`
+	font-size: ${unit(15)};
+	font-weight: 700;
+	color: rgba(240, 248, 255, 1);
+`;
+
+const TrackCardDesc = styled.span`
+	font-size: ${unit(12)};
+	color: rgba(190, 210, 240, 0.85);
+	line-height: 1.3;
+`;
+
+const TrackCardBadge = styled.span<{ $variant: 'save' | 'quality' }>`
+	margin-top: ${unit(4)};
+	padding: ${unit(3)} ${unit(8)};
+	border-radius: ${unit(999)};
+	font-size: ${unit(11)};
+	font-weight: 700;
+	background: ${({ $variant }) =>
+		$variant === 'save' ? 'rgba(17, 223, 185, 0.18)' : 'rgba(120, 170, 255, 0.18)'};
+	color: ${({ $variant }) =>
+		$variant === 'save' ? 'rgba(80, 230, 200, 1)' : 'rgba(160, 200, 255, 1)'};
+`;
+
+const TrackHelpText = styled.p`
+	font-size: ${unit(12)};
+	line-height: 1.5;
+	color: rgba(180, 200, 230, 0.8);
+	padding: ${unit(4)} ${unit(2)};
+`;
+
+const TokenEstimateRow = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+`;
+
+const TokenEstimateDuration = styled.span`
+	font-size: ${unit(13)};
+	color: rgba(200, 215, 240, 0.9);
+	font-weight: 600;
+`;
+
+const TokenBarGroup = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(10)};
+`;
+
+const TokenBarItem = styled.div<{ $active: boolean }>`
+	display: flex;
+	align-items: center;
+	gap: ${unit(8)};
+	opacity: ${({ $active }) => ($active ? 1 : 0.6)};
+	transition: opacity 0.2s ease;
+`;
+
+const TokenBarLabel = styled.span`
+	font-size: ${unit(12)};
+	font-weight: 600;
+	color: rgba(200, 215, 240, 0.9);
+	min-width: ${unit(100)};
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: ${unit(4)};
+`;
+
+const TokenBarTrack = styled.div`
+	flex: 1;
+	height: ${unit(10)};
+	border-radius: ${unit(999)};
+	background: rgba(60, 80, 120, 0.4);
+	overflow: hidden;
+`;
+
+const TokenBarFill = styled.div<{ $active: boolean }>`
+	height: 100%;
+	border-radius: ${unit(999)};
+	background: ${({ $active }) => ($active ? 'rgba(100, 180, 255, 0.8)' : 'rgba(140, 170, 210, 0.4)')};
+	transition: width 0.4s ease, background-color 0.2s ease;
+`;
+
+const TokenBarValue = styled.span`
+	font-size: ${unit(12)};
+	font-weight: 700;
+	color: rgba(220, 235, 255, 0.95);
+	min-width: ${unit(100)};
+	text-align: right;
+	white-space: nowrap;
+`;
+
+const TokenEstimateNotice = styled.p`
+	font-size: ${unit(11)};
+	color: rgba(160, 180, 210, 0.7);
+	line-height: 1.4;
+`;
+
+const OrgTokenRow = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+`;
+
+const OrgTokenLabel = styled.span`
+	font-size: ${unit(13)};
+	font-weight: 600;
+	color: rgba(200, 215, 240, 0.9);
+`;
+
+const OrgTokenValue = styled.strong`
+	font-size: ${unit(14)};
+	font-weight: 700;
+	color: rgba(230, 242, 255, 1);
+`;
+
+const OrgTokenBarTrack = styled.div`
+	width: 100%;
+	height: ${unit(10)};
+	border-radius: ${unit(999)};
+	background: rgba(60, 80, 120, 0.4);
+	overflow: hidden;
+`;
+
+const OrgTokenBarFill = styled.div<{ $warning?: boolean }>`
+	height: 100%;
+	border-radius: ${unit(999)};
+	background: ${({ $warning }) => ($warning ? 'rgba(255, 100, 100, 0.8)' : 'rgba(80, 200, 170, 0.8)')};
+	transition: width 0.4s ease, background-color 0.3s ease;
+`;
+
+const OrgTokenMetaGrid = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(6)};
+	padding-top: ${unit(4)};
+	border-top: 1px solid rgba(100, 130, 180, 0.2);
+`;
+
+const OrgTokenMetaLabel = styled.span`
+	font-size: ${unit(12)};
+	color: rgba(170, 190, 220, 0.75);
+`;
+
+const OrgTokenMetaValue = styled.span`
+	font-size: ${unit(12)};
+	font-weight: 600;
+	color: rgba(210, 225, 250, 0.9);
+`;
+
+const OrgTokenEstimateBanner = styled.div<{ $warning?: boolean }>`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(6)};
+	padding: ${unit(10)} ${unit(12)};
+	border-radius: ${unit(8)};
+	background: ${({ $warning }) => ($warning ? 'rgba(200, 50, 50, 0.15)' : 'rgba(60, 120, 200, 0.12)')};
+	border: 1px solid ${({ $warning }) => ($warning ? 'rgba(255, 100, 100, 0.3)' : 'rgba(100, 160, 240, 0.25)')};
+`;
+
+const OrgTokenEstimateRow = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+
+	span {
+		font-size: ${unit(12)};
+		color: rgba(180, 200, 230, 0.8);
+	}
+
+	strong {
+		font-size: ${unit(12)};
+		font-weight: 700;
+		color: rgba(230, 242, 255, 1);
+	}
+`;
+
+const OrgTokenWarning = styled.p`
+	font-size: ${unit(11)};
+	font-weight: 600;
+	color: rgba(255, 130, 130, 1);
+	line-height: 1.4;
+`;
+
+const tokenPulse = keyframes`
+	0%, 100% { opacity: 0.5; }
+	50% { opacity: 1; }
+`;
+
+const tokenColorPulse = keyframes`
+	0%, 100% { color: rgba(240, 248, 255, 1); }
+	50% { color: rgba(255, 100, 120, 1); }
+`;
+
+const OrgTokenHeroRow = styled.div`
+	display: flex;
+	align-items: baseline;
+	gap: ${unit(6)};
+`;
+
+const OrgTokenHeroNumber = styled.strong`
+	font-size: ${unit(28)};
+	font-weight: 800;
+	color: rgba(240, 248, 255, 1);
+	letter-spacing: -0.5px;
+	animation: ${tokenColorPulse} 1.8s ease-in-out infinite;
+`;
+
+const OrgTokenHeroUnit = styled.span`
+	font-size: ${unit(13)};
+	font-weight: 500;
+	color: rgba(170, 195, 230, 0.7);
+`;
+
+const OrgTokenBarTrackLarge = styled.div`
+	width: 100%;
+	height: ${unit(16)};
+	border-radius: ${unit(999)};
+	background: rgba(60, 80, 120, 0.4);
+	overflow: hidden;
+	display: flex;
+`;
+
+const OrgTokenBarAfter = styled.div`
+	height: 100%;
+	background: rgba(80, 200, 170, 0.8);
+	transition: width 0.4s ease;
+`;
+
+const OrgTokenBarDeduct = styled.div<{ $warning?: boolean }>`
+	height: 100%;
+	background: rgba(255, 100, 120, 0.9);
+	animation: ${tokenPulse} 1.8s ease-in-out infinite;
+	transition: width 0.4s ease;
+`;
+
+const OrgTokenBarLegend = styled.div`
+	display: flex;
+	gap: ${unit(14)};
+	flex-wrap: wrap;
+`;
+
+const OrgTokenLegendItem = styled.div`
+	display: flex;
+	align-items: center;
+	gap: ${unit(5)};
+
+	span {
+		font-size: ${unit(11)};
+		color: rgba(190, 210, 235, 0.8);
+	}
+`;
+
+const OrgTokenLegendDot = styled.span<{ $color: string; $pulse?: boolean }>`
+	width: ${unit(8)};
+	height: ${unit(8)};
+	border-radius: ${unit(999)};
+	background: ${({ $color }) => $color};
+	flex-shrink: 0;
+	animation: ${({ $pulse }) => ($pulse ? tokenPulse : 'none')} 1.8s ease-in-out infinite;
+`;
+
+const OrgTokenMetaGridLarge = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(8)};
+	padding-top: ${unit(6)};
+	border-top: 1px solid rgba(100, 130, 180, 0.2);
+`;
+
+const OrgTokenMetaRow = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+`;
+
+const OrgTokenMetaLabelLg = styled.span`
+	font-size: ${unit(14)};
+	color: rgba(170, 195, 225, 0.8);
+`;
+
+const OrgTokenMetaValueLg = styled.span`
+	font-size: ${unit(14)};
+	font-weight: 700;
+	color: rgba(220, 235, 255, 0.95);
+`;
+
+const TokenCompareSection = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(8)};
+	padding-top: ${unit(6)};
+	border-top: 1px solid rgba(100, 130, 180, 0.2);
+`;
+
+const TokenCompareSectionTitle = styled.span`
+	font-size: ${unit(12)};
+	font-weight: 700;
+	color: rgba(190, 210, 240, 0.7);
+`;
+
+const OrgTokenWarningBanner = styled.div`
+	padding: ${unit(10)} ${unit(12)};
+	border-radius: ${unit(8)};
+	background: rgba(200, 50, 50, 0.15);
+	border: 1px solid rgba(255, 100, 100, 0.3);
+	font-size: ${unit(12)};
+	font-weight: 600;
+	color: rgba(255, 130, 130, 1);
+	line-height: 1.4;
+`;
+
+const TokenTooltipWrap = styled.span`
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	cursor: default;
+	color: rgba(170, 195, 230, 0.7);
+	transition: color 0.15s ease;
+	vertical-align: middle;
+	line-height: 0;
+
+	&:hover {
+		color: rgba(210, 230, 255, 1);
+	}
+
+	&::after {
+		content: attr(data-tooltip);
+		position: absolute;
+		left: 50%;
+		bottom: calc(100% + ${unit(8)});
+		transform: translateX(-50%);
+		background: rgba(26, 43, 89, 0.98);
+		color: rgba(230, 240, 255, 0.95);
+		padding: ${unit(8)} ${unit(10)};
+		border-radius: ${unit(6)};
+		border: 1px solid rgba(255, 255, 255, 0.22);
+		font-size: ${unit(11)};
+		font-weight: 500;
+		line-height: 1.5;
+		white-space: pre-line;
+		width: max-content;
+		min-width: ${unit(280)};
+		max-width: ${unit(360)};
+		box-shadow: 0 ${unit(10)} ${unit(28)} rgba(10, 23, 45, 0.25);
+		z-index: 20;
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transition: opacity 0.12s ease, visibility 0.12s ease;
+	}
+
+	&::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		bottom: calc(100% + ${unit(2)});
+		transform: translateX(-50%);
+		border-left: ${unit(5)} solid transparent;
+		border-right: ${unit(5)} solid transparent;
+		border-top: ${unit(6)} solid rgba(26, 43, 89, 0.98);
+		z-index: 20;
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transition: opacity 0.12s ease, visibility 0.12s ease;
+	}
+
+	&:hover::after,
+	&:hover::before {
+		opacity: 1;
+		visibility: visible;
+	}
+`;
+
+const TrackStageLayout = styled.div`
+	width: min(${unit(560)}, calc(100vw - ${unit(48)}));
+	display: flex;
+	flex-direction: column;
+	gap: ${unit(14)};
+`;
+
+const ConfigureNextButton = styled.button`
+	position: relative;
+	width: min(${unit(360)}, 100%);
+	height: ${unit(54)};
+	border-radius: ${unit(999)};
+	border: none;
+	background: rgba(41, 85, 168, 1);
+	color: white;
+	font-size: ${unit(17)};
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color 0.2s ease, box-shadow 0.2s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	&:hover {
+		background: rgba(50, 96, 184, 1);
+		box-shadow: 0 ${unit(8)} ${unit(16)} rgba(24, 59, 126, 0.28);
+	}
+`;
+
+const ConfigureNextArrow = styled.span`
+	position: absolute;
+	right: ${unit(20)};
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	align-items: center;
+`;
+
+const ConfigurePrevButton = styled.button`
+	height: ${unit(54)};
+	padding: 0 ${unit(28)};
+	border-radius: ${unit(999)};
+	border: 1.5px solid rgba(180, 200, 230, 0.5);
+	background: rgba(30, 50, 90, 0.3);
+	color: rgba(200, 220, 250, 0.9);
+	font-size: ${unit(15)};
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s ease, border-color 0.2s ease;
+
+	&:hover {
+		background: rgba(40, 65, 110, 0.4);
+		border-color: rgba(180, 200, 230, 0.7);
 	}
 `;
