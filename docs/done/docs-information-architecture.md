@@ -2,7 +2,7 @@
 
 - 상태: done
 - 담당 역할: 역할 기획
-- 담당 터미널: codex
+- 담당 터미널: claude
 - 관련 경로: `docs/agent`, `docs/plan`, `docs/progress`, `docs/done`, `docs/project`
 - 목적: 문서 저장 위치와 역할 분리를 최신 운영 규칙에 맞게 정리
 - 완료 일시: 2026-03-17 16:02

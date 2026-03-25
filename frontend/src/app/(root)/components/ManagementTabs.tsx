@@ -6,6 +6,7 @@ import { unit } from '@/shared/utils/base';
 
 const TABS = [
 	{ key: 'members', label: '멤버 관리', path: '/management/members' },
+	{ key: 'roles', label: '역할 관리', path: '/management/roles' },
 	{ key: 'subscription', label: '구독 관리', path: '/management/subscription' },
 ];
 

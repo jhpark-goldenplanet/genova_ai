@@ -1,6 +1,6 @@
-# Codex Workflow
+# Claude Code Workflow
 
-이 문서는 현재 프로젝트에서 Codex를 사용할 때의 작업 흐름 기준점입니다.
+이 문서는 현재 프로젝트에서 Claude Code를 사용할 때의 작업 흐름 기준점입니다.
 
 ## 목적
 
@@ -12,7 +12,7 @@
 
 1. `AGENTS.md`를 확인한다.
 2. `docs/progress/`에서 현재 진행 중인 작업과 점유 경로를 확인한다.
-3. 이 문서와 `docs/agent/CODEX_RULES.md`, `docs/agent/MULTI_TERMINAL_WORKFLOW.md`를 확인한다.
+3. 이 문서와 `docs/agent/CLAUDE_RULES.md`, `docs/agent/MULTI_TERMINAL_WORKFLOW.md`를 확인한다.
 4. 사용자가 아래 역할 호출 중 하나를 말하면 해당 역할 문서를 자동으로 참조한다.
 5. 큰 방향이 필요하면 `docs/plan/INDEX.md`를 확인한다.
 6. 필요한 경우에만 프로젝트 문서(`README`, `docs/*`)를 본다.
@@ -29,7 +29,7 @@
 
 - Claude 전용 운영 자산은 `claude-legacy`로 분리했다.
 - `docs` 아래 프로젝트 인수인계 문서는 그대로 유지한다.
-- 앞으로 Codex 운영 규칙은 이 문서와 `docs/agent/CODEX_RULES.md`에 누적한다.
+- 앞으로 Claude Code 운영 규칙은 이 문서와 `docs/agent/CLAUDE_RULES.md`에 누적한다.
 
 ## 다음에 채울 항목
 

@@ -1,13 +1,13 @@
-# UI Session Codex
+# UI Session Claude
 
 - 상태: in-progress
 - 담당 역할: 화면개발
-- 담당 터미널: codex-shell-pid-2
+- 담당 터미널: claude-shell-pid-2
 - 관련 경로: frontend/src/components/Loader.tsx, frontend/src/app/(root)/components/UploadContent.tsx
 - 목적: 화면개발 역할 세션 시작 및 이후 UI 작업 범위 관리
 - 작업 범위: 사용자 지시를 받은 프론트엔드 화면 작업으로 한정
 - 제외 범위: 백엔드 계약 변경, 기능 요구사항 변경, 대규모 공통화 리팩터링
-- 선행 문서: AGENTS.md, docs/agent/CODEX_WORKFLOW.md, docs/agent/CODEX_RULES.md, docs/agent/MULTI_TERMINAL_WORKFLOW.md, docs/agent/roles/ui-developer.md
+- 선행 문서: AGENTS.md, docs/agent/CLAUDE_WORKFLOW.md, docs/agent/CLAUDE_RULES.md, docs/agent/MULTI_TERMINAL_WORKFLOW.md, docs/agent/roles/ui-developer.md
 
 ## 최근 업데이트
 

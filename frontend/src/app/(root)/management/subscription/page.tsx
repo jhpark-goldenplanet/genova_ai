@@ -2,18 +2,14 @@
 
 import styled from '@emotion/styled';
 import { unit } from '@/shared/utils/base';
+import { useMemo } from 'react';
 import ManagementTabs from '../../components/ManagementTabs';
-
-const SUBSCRIPTION_INFO = {
-	plan: 'Plus',
-	startDate: '2026-01-01',
-	renewalDate: '2026-04-01',
-	remainingTokens: '4,280,000',
-	monthlyTokens: '6,000,000',
-	maxUsers: 35,
-};
+import { readTokenState, getRemaining } from '@/shared/utils/tokenState';
 
 export default function SubscriptionPage() {
+	const tokenState = useMemo(() => readTokenState(), []);
+	const remaining = getRemaining(tokenState);
+
 	return (
 		<Page>
 			<Header>
@@ -25,27 +21,27 @@ export default function SubscriptionPage() {
 			<Card>
 				<Row>
 					<Label>현재 플랜</Label>
-					<Value>{SUBSCRIPTION_INFO.plan}</Value>
+					<Value>{tokenState.org.plan}</Value>
 				</Row>
 				<Row>
 					<Label>최초 시작일</Label>
-					<Value>{SUBSCRIPTION_INFO.startDate}</Value>
+					<Value>2026-01-01</Value>
 				</Row>
 				<Row>
 					<Label>토큰 갱신일</Label>
-					<Value>{SUBSCRIPTION_INFO.renewalDate}</Value>
+					<Value>{tokenState.org.resetDate}</Value>
 				</Row>
 				<Row>
 					<Label>현재 남은 토큰</Label>
-					<Value>{SUBSCRIPTION_INFO.remainingTokens}</Value>
+					<Value>{remaining.toLocaleString()}</Value>
 				</Row>
 				<Row>
 					<Label>월 제공 토큰</Label>
-					<Value>{SUBSCRIPTION_INFO.monthlyTokens}</Value>
+					<Value>{tokenState.org.monthlyLimit.toLocaleString()}</Value>
 				</Row>
 				<Row>
 					<Label>플랜 내 사용자 수</Label>
-					<Value>{SUBSCRIPTION_INFO.maxUsers}명</Value>
+					<Value>35명</Value>
 				</Row>
 			</Card>
 

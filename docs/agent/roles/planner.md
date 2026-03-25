@@ -11,8 +11,8 @@
 ## 필수 참고 문서
 
 - `AGENTS.md`
-- `docs/agent/CODEX_WORKFLOW.md`
-- `docs/agent/CODEX_RULES.md`
+- `docs/agent/CLAUDE_WORKFLOW.md`
+- `docs/agent/CLAUDE_RULES.md`
 - `docs/agent/MULTI_TERMINAL_WORKFLOW.md`
 - `docs/agent/OPERATING_GUIDE.md`
 - `docs/plan/INDEX.md`
