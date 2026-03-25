@@ -3,7 +3,7 @@
 ## 목적
 
 - Genova AI의 현재 서비스 방향과 기능 단위 로드맵을 관리한다.
-- 기획 결정은 이 문서에 누적하고, 세션별 작업 상황은 `docs/progress/`, 완료 상세는 `docs/done/`으로 분리한다.
+- 기획 결정은 이 문서에 누적하고, 세션별 작업 상황은 `docs/workflow/progress/`, 완료 상세는 `docs/workflow/done/`으로 분리한다.
 
 ## 현재 작업 원칙
 
