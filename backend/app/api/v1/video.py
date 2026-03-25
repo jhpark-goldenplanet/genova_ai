@@ -33,6 +33,8 @@ from app.schemas.video import (
     SegmentResponse,
     SplitDownloadRequest,
     SplitDownloadResponse,
+    VideoListItem,
+    VideoListResponse,
     VideoResponse,
     VideoStatusResponse,
 )
@@ -50,6 +52,96 @@ class VideoUploadByLinkRequest(BaseModel):
     url: HttpUrl
     title: Optional[str] = None
     description: Optional[str] = None
+
+
+@router.get("/list", response_model=VideoListResponse, dependencies=[Depends(verify_api_key)])
+async def list_videos(
+    limit: int = 50,
+    offset: int = 0,
+    status: Optional[str] = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> VideoListResponse:
+    """
+    Get list of all videos with metadata.
+
+    **Query Parameters:**
+    - limit: Max number of videos (default 50, max 100)
+    - offset: Pagination offset (default 0)
+    - status: Filter by status (PENDING, IN_PROGRESS, COMPLETE, FAILED)
+
+    **Response includes:**
+    - Video metadata (title, status, duration, file size, etc.)
+    - Segment count per video
+    - Thumbnail URL (signed, 1-hour expiry)
+    """
+    try:
+        from app.repositories.video_repository import VideoRepository
+        from app.repositories.segment_repository import SegmentRepository
+        from app.services.gcs_service import gcs_service
+
+        limit = min(limit, 100)
+        video_repo = VideoRepository(session)
+        segment_repo = SegmentRepository(session)
+
+        videos = await video_repo.list_videos(limit=limit, offset=offset, status=status)
+
+        # Get total count
+        from sqlalchemy import select, func
+        from app.models.video import Video
+        count_stmt = select(func.count(Video.id))
+        if status:
+            count_stmt = count_stmt.where(Video.status == status)
+        total_result = await session.execute(count_stmt)
+        total = total_result.scalar() or 0
+
+        items = []
+        for video in videos:
+            # Get segment count
+            seg_count = await segment_repo.count_segments_by_video_id(video.id)
+
+            # Generate thumbnail URL if available
+            thumbnail_url = None
+            if video.thumbnail_gcs_path:
+                try:
+                    thumbnail_url = gcs_service.generate_signed_url(
+                        video.thumbnail_gcs_path, expiration_hours=1
+                    )
+                except Exception:
+                    pass
+
+            items.append(VideoListItem(
+                id=video.id,
+                title=video.title,
+                description=video.description,
+                source_type=video.source_type,
+                status=video.status,
+                processing_progress=video.processing_progress,
+                duration_seconds=video.duration_seconds,
+                file_size_bytes=video.file_size_bytes,
+                original_filename=video.original_filename,
+                source_language=video.source_language,
+                thumbnail_url=thumbnail_url,
+                segments_count=seg_count,
+                created_at=video.created_at,
+                updated_at=video.updated_at,
+            ))
+
+        return VideoListResponse(
+            videos=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": 1400,
+                "message": f"Failed to list videos: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
 
 
 @router.post("/getUploadUrl", response_model=GetUploadUrlResponse, dependencies=[Depends(verify_api_key)])

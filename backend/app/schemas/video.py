@@ -376,6 +376,36 @@ class UsageSummaryResponse(BaseModel):
     period_end: Optional[datetime] = None
 
 
+class VideoListItem(BaseModel):
+    """Single video item in list response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    source_type: str
+    status: str
+    processing_progress: int
+    duration_seconds: Optional[int] = None
+    file_size_bytes: Optional[int] = None
+    original_filename: Optional[str] = None
+    source_language: str = "ko"
+    thumbnail_url: Optional[str] = None
+    segments_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class VideoListResponse(BaseModel):
+    """Response for video list endpoint."""
+
+    videos: List[VideoListItem]
+    total: int
+    limit: int
+    offset: int
+
+
 class ErrorResponse(BaseModel):
     """Schema for error responses."""
 
