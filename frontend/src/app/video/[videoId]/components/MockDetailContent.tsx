@@ -10,7 +10,6 @@ import { useModal } from '@/shared/hooks';
 import useGetVideoInfo from '@/shared/hooks/useGetVideoInfo';
 import { unit } from '@/shared/utils/base';
 import { ISegmentsSchema } from '@/typings/schema';
-import { useSplitDownload } from '@/shared/hooks/queries/video';
 import { errorToast, infoToast, successToast } from '@/shared/utils/toastUtils';
 
 type DetailTabType = 'summary' | 'script' | 'split';
@@ -59,6 +58,41 @@ const SPLIT_SEGMENT_COLORS = [
 		chipBg: 'rgba(255, 245, 235, 1)',
 		chipBorder: 'rgba(245, 208, 174, 1)',
 		chipText: 'rgba(159, 94, 35, 1)',
+	},
+	{
+		bar: 'linear-gradient(90deg, rgba(150, 80, 190, 1) 0%, rgba(178, 115, 215, 1) 100%)',
+		glow: 'rgba(178, 115, 215, 0.9)',
+		chipBg: 'rgba(245, 236, 255, 1)',
+		chipBorder: 'rgba(210, 180, 240, 1)',
+		chipText: 'rgba(110, 55, 155, 1)',
+	},
+	{
+		bar: 'linear-gradient(90deg, rgba(200, 75, 95, 1) 0%, rgba(225, 110, 125, 1) 100%)',
+		glow: 'rgba(225, 110, 125, 0.9)',
+		chipBg: 'rgba(255, 236, 240, 1)',
+		chipBorder: 'rgba(240, 190, 200, 1)',
+		chipText: 'rgba(160, 50, 70, 1)',
+	},
+	{
+		bar: 'linear-gradient(90deg, rgba(55, 140, 180, 1) 0%, rgba(85, 175, 210, 1) 100%)',
+		glow: 'rgba(85, 175, 210, 0.9)',
+		chipBg: 'rgba(232, 248, 255, 1)',
+		chipBorder: 'rgba(170, 218, 240, 1)',
+		chipText: 'rgba(35, 105, 145, 1)',
+	},
+	{
+		bar: 'linear-gradient(90deg, rgba(160, 150, 60, 1) 0%, rgba(195, 185, 90, 1) 100%)',
+		glow: 'rgba(195, 185, 90, 0.9)',
+		chipBg: 'rgba(252, 250, 232, 1)',
+		chipBorder: 'rgba(225, 220, 165, 1)',
+		chipText: 'rgba(120, 112, 30, 1)',
+	},
+	{
+		bar: 'linear-gradient(90deg, rgba(90, 90, 130, 1) 0%, rgba(125, 125, 165, 1) 100%)',
+		glow: 'rgba(125, 125, 165, 0.9)',
+		chipBg: 'rgba(240, 240, 250, 1)',
+		chipBorder: 'rgba(195, 195, 220, 1)',
+		chipText: 'rgba(65, 65, 105, 1)',
 	},
 ];
 
@@ -185,7 +219,7 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	const [selectedThumbnailImage, setSelectedThumbnailImage] = useState<string | undefined>(undefined);
 	const splitRailRef = useRef<HTMLDivElement | null>(null);
 	const { videoInfo, isConverting, status, step, percentage } = useGetVideoInfo();
-	const splitDownloadMutation = useSplitDownload();
+	// splitDownload API는 새 API 준비 후 교체 예정 (현재 console.log만 출력)
 
 	useEffect(() => {
 		if (typeof window === 'undefined') return;
@@ -290,7 +324,8 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 	const selectedDownloadSegmentIdSet = useMemo(() => new Set(selectedDownloadSegmentIds), [selectedDownloadSegmentIds]);
 	const selectedSplitPointValue = selectedSplitPointIndex === null ? null : splitPoints[selectedSplitPointIndex];
 	const isServerSplitMode = actualSplitSegments.length > 0;
-	const displayedSplitSegments = isServerSplitMode
+	const isSplitPointsModified = splitPoints.length !== actualSplitPoints.length || splitPoints.some((p, i) => p !== actualSplitPoints[i]);
+	const displayedSplitSegments = isServerSplitMode && !isSplitPointsModified
 		? actualSplitSegments.map((segment, index) => {
 				const boundaries = [0, ...splitPoints, 100];
 				return {
@@ -363,13 +398,14 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 		});
 	};
 	const handleResetSplit = () => {
-		setSplitPoints([33, 66]);
+		const original = actualSplitPoints.length ? actualSplitPoints : [33, 66];
+		setSplitPoints(original);
 		setReanalyzeCount(0);
 		setSelectedSplitPointIndex(null);
 	};
 	const handleAddSplitPoint = () => {
 		setSplitPoints((prev) => {
-			if (prev.length >= 4) return prev;
+			if (prev.length >= 7) return prev;
 			const boundaries = [0, ...prev, 100].sort((a, b) => a - b);
 			let widestIndex = 0;
 			let widestGap = 0;
@@ -397,8 +433,20 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 		confirm({
 			message: '토큰을 사용해 새로운 분석을 진행하시겠습니까?',
 			okHandler: () => {
+				const sortedPoints = [...splitPoints].sort((a, b) => a - b);
+				const boundaries = [0, ...sortedPoints, 100];
+				const segments = boundaries.slice(0, -1).map((startPct, index) => {
+					const endPct = boundaries[index + 1];
+					return {
+						segment_no: index + 1,
+						start_time: formatSeconds(Math.round((totalSeconds * startPct) / 100)),
+						end_time: formatSeconds(Math.round((totalSeconds * endPct) / 100)),
+					};
+				});
+				console.log('[재분석 요청]', { video_id: videoId, segments });
 				setReanalyzeCount((prev) => prev + 1);
 				closeConfirm();
+				successToast('재분석 요청이 전송되었습니다. (console 확인)');
 			},
 		});
 	};
@@ -461,55 +509,26 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 			return;
 		}
 
-		const selectedSegments = displayedSplitSegments
-			.map((segment, index) => ({ segment, original: videoInfo?.segments?.[index], index }))
-			.filter(({ segment, original }) => original && selectedDownloadSegmentIdSet.has(segment.id));
+		const selectedSegments = displayedSplitSegments.filter((segment) => selectedDownloadSegmentIdSet.has(segment.id));
 
 		if (!selectedSegments.length) {
 			errorToast('선택한 구간 정보를 찾을 수 없습니다.');
 			return;
 		}
 
-		try {
-			const response = await splitDownloadMutation.mutateAsync({
-				videoId,
-				payload: {
-					segments: selectedSegments.map(({ original, index }, downloadIndex) => ({
-						segment_no: downloadIndex + 1,
-						start_time: original!.start_time,
-						end_time: original!.end_time,
-						title: original!.title || `구간 ${index + 1}`,
-					})),
-					thumbnail_image: selectedThumbnailImage,
-				},
-			});
+		console.log('[분할 영상 다운로드 요청]', {
+			video_id: videoId,
+			segments: selectedSegments.map((segment, index) => ({
+				segment_no: index + 1,
+				start_time: segment.timeRange.split(' - ')[0],
+				end_time: segment.timeRange.split(' - ')[1],
+				title: segment.topic,
+			})),
+			thumbnail_image: selectedThumbnailImage ? '(이미지 데이터 포함)' : undefined,
+		});
 
-			await Promise.all(
-				response.download_urls.map(async (item, index) => {
-					const downloadResponse = await fetch(item.download_url);
-					if (!downloadResponse.ok) {
-						throw new Error(`Failed to download segment ${index + 1}`);
-					}
-
-					const blob = await downloadResponse.blob();
-					const objectUrl = window.URL.createObjectURL(blob);
-					const anchor = document.createElement('a');
-					const fileBaseName = sanitizeDownloadFileName(item.title || `segment_${index + 1}`);
-
-					anchor.href = objectUrl;
-					anchor.download = `${fileBaseName}.mp4`;
-					document.body.appendChild(anchor);
-					anchor.click();
-					document.body.removeChild(anchor);
-					window.URL.revokeObjectURL(objectUrl);
-				}),
-			);
-			successToast(`${selectedSegments.length}개 구간 다운로드를 시작했습니다.`);
-			handleCancelSplitDownloadSelection();
-		} catch (error) {
-			console.error('[SplitDownload] failed', error);
-			errorToast('분할 다운로드에 실패했습니다.');
-		}
+		successToast(`${selectedSegments.length}개 구간 다운로드 요청이 전송되었습니다. (console 확인)`);
+		handleCancelSplitDownloadSelection();
 	};
 
 	useEffect(() => {
@@ -678,7 +697,7 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 									</SplitRailHeaderText>
 											<SplitHeaderActions>
 												<SplitBadge>{splitSegments.length}개 구간</SplitBadge>
-												<SplitIconButton type="button" onClick={handleAddSplitPoint} disabled={splitPoints.length >= 4}>
+												<SplitIconButton type="button" onClick={handleAddSplitPoint} disabled={splitPoints.length >= 7}>
 													추가
 												</SplitIconButton>
 												<SplitDeleteButton
@@ -689,6 +708,12 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 												>
 													삭제
 												</SplitDeleteButton>
+												<SplitIconButton type="button" onClick={handleResetSplit} aria-label="초기화">
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+														<path d="M21 12C21 16.97 16.97 21 12 21C7.03 21 3 16.97 3 12C3 7.03 7.03 3 12 3C14.76 3 17.22 4.27 18.85 6.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+														<path d="M19 2.5V6.5H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+													</svg>
+												</SplitIconButton>
 											</SplitHeaderActions>
 								</SplitRailHeader>
 								<SplitRailArea ref={splitRailRef}>
@@ -795,9 +820,6 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 							</SplitSecondaryCard>
 
 							<SplitActionBar>
-								<SplitGhostButton type="button" onClick={handleResetSplit}>
-									초기화
-								</SplitGhostButton>
 								<SplitSecondaryButton type="button" onClick={handleReanalyze}>
 									재분석
 								</SplitSecondaryButton>
@@ -812,7 +834,7 @@ export default function MockDetailContent({ videoId, tab }: Props) {
 										<SplitPrimaryButton
 											type="button"
 											onClick={handleConfirmSplitDownload}
-											disabled={!selectedDownloadSegmentIds.length || splitDownloadMutation.isPending}
+											disabled={!selectedDownloadSegmentIds.length}
 										>
 											{selectedDownloadSegmentIds.length}개 다운로드
 										</SplitPrimaryButton>
