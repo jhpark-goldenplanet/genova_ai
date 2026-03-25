@@ -28,6 +28,8 @@ from app.schemas.video import (
     ErrorResponse,
     GetUploadUrlRequest,
     GetUploadUrlResponse,
+    ReanalyzeRequest,
+    ReanalyzeResponse,
     SegmentResponse,
     SplitDownloadRequest,
     SplitDownloadResponse,
@@ -175,11 +177,30 @@ async def confirm_upload(
             extra={"video_id": str(request.video_id), "gcs_path": video.gcs_path}
         )
 
+        # Create first analysis record (analysis_no=1)
+        from app.repositories.analysis_repository import AnalysisRepository
+        analysis_repo = AnalysisRepository(session)
+        analysis = await analysis_repo.create(
+            video_id=video.id,
+            analysis_no=1,
+            title="Analysis 1",
+            option=request.option or "B",
+            mode=request.mode or "AUTO",
+            split_count=request.split_count or 0,
+            prompt_tags=request.prompt_tags,
+            source_language=request.language or "ko",
+        )
+        await session.commit()
+
+        split_count = request.split_count if request.split_count and request.split_count > 0 else None
+
         # Start background processing pipeline
         await video_processing_pipeline.start_processing_from_gcs(
             video_id=video.id,
             gcs_path=video.gcs_path,
             language=request.language,
+            split_count=split_count,
+            analysis_id=analysis.id,
         )
 
         return VideoResponse.from_video(
@@ -496,6 +517,7 @@ async def get_status_progress_transcribe(
 async def analyze_video(
     video_id: uuid.UUID,
     language: Optional[str] = None,
+    analysis_id: Optional[uuid.UUID] = None,
     session: AsyncSession = Depends(get_db_session)
 ) -> AnalyzeResponse:
     """
@@ -725,6 +747,86 @@ async def cancel_video_processing(
                 "error_code": 1400,
                 "message": f"Internal server error: {str(e)}",
                 "timestamp": "2024-01-01T00:00:00Z",
+            },
+        )
+
+
+@router.post("/{video_id}/reanalyze", response_model=ReanalyzeResponse, dependencies=[Depends(verify_api_key)])
+async def reanalyze_video(
+    video_id: uuid.UUID,
+    request: ReanalyzeRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ReanalyzeResponse:
+    """
+    Re-analyze video with user-defined segment boundaries.
+
+    Deletes existing segments and runs AI analysis (STT + Gemini) on each
+    custom segment. Results are permanently saved to DB and GCS.
+
+    **Request Body:**
+    - segments: List of segment boundaries with segment_no, start_time (HH:MM:SS), end_time (HH:MM:SS)
+    - language: Source language (default: ko)
+    """
+    try:
+        video_service = VideoService(session)
+        video = await video_service.get_video_by_id(video_id)
+
+        if video.status != "COMPLETE":
+            raise VideoProcessingException(
+                1001,
+                f"Video must be in COMPLETE status for re-analysis. Current: {video.status}"
+            )
+
+        # Check if already processing
+        from app.services.background_task_service import background_task_manager
+        video_id_str = str(video_id)
+        if video_id_str in background_task_manager.active_tasks:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error_code": 1001,
+                    "message": "A processing task is already running for this video",
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
+
+        # Update video status to IN_PROGRESS
+        await video_service.update_video_status(video_id, "IN_PROGRESS", 0)
+
+        # Convert segments to dict format
+        segments_data = [
+            {
+                "segment_no": seg.segment_no,
+                "start_time": seg.start_time,
+                "end_time": seg.end_time,
+            }
+            for seg in request.segments
+        ]
+
+        # Start re-analysis pipeline
+        await video_processing_pipeline.start_reanalysis(
+            video_id=video_id,
+            segments=segments_data,
+            language=request.language or "ko",
+        )
+
+        return ReanalyzeResponse(
+            video_id=video_id,
+            status="IN_PROGRESS",
+            message=f"Re-analysis started with {len(request.segments)} custom segments",
+        )
+
+    except VideoProcessingException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": 1400,
+                "message": f"Internal server error: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
             },
         )
 

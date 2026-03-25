@@ -149,7 +149,7 @@ class AnalyzeResponse(BaseModel):
     keywords: List[str]
     segments: List[SegmentResponse]
     processing_status: str = Field(
-        ..., pattern="^(PENDING|IN_PROGRESS|COMPLETE|FAILED)$"
+        ..., pattern="^(PENDING|PENDING_UPLOAD|UPLOADED|IN_PROGRESS|COMPLETE|FAILED)$"
     )
     source_language: str = Field(..., description="Source language of the video content")
     gcs_view_link: Optional[str] = Field(None, description="URL to view the original video")
@@ -160,6 +160,7 @@ class SplitDownloadRequest(BaseModel):
     """Schema for video split download requests."""
 
     segments: List[dict] = Field(..., min_length=1, max_length=10)
+    analysis_id: Optional[uuid.UUID] = Field(None, description="Analysis ID for segment lookup")
     thumbnail_image: Optional[str] = Field(
         None, description="Base64 encoded thumbnail image (without data URI prefix)"
     )
@@ -239,6 +240,140 @@ class ConfirmUploadRequest(BaseModel):
 
     video_id: uuid.UUID = Field(..., description="Video identifier from getUploadUrl")
     language: Optional[str] = Field(default="ko", pattern="^(ko|en|ja|zh)$", description="Language for analysis")
+    option: Optional[str] = Field(default="B", pattern="^(A|B)$", description="A=lightweight, B=premium multimodal")
+    mode: Optional[str] = Field(default="AUTO", pattern="^(AUTO|CUSTOM)$", description="AUTO or CUSTOM")
+    split_count: Optional[int] = Field(default=0, ge=0, le=10, description="0=auto, 3-10=specified")
+    prompt_tags: Optional[List[str]] = Field(default=None, description="Tags for CUSTOM mode")
+
+
+class CreateAnalysisRequest(BaseModel):
+    """Schema for creating a new analysis on an existing video."""
+
+    title: Optional[str] = Field(None, max_length=255, description="Analysis title (auto-generated if omitted)")
+    option: str = Field(default="B", pattern="^(A|B)$", description="A=lightweight STT+text, B=premium multimodal")
+    mode: str = Field(default="AUTO", pattern="^(AUTO|CUSTOM)$", description="AUTO or CUSTOM")
+    split_count: int = Field(default=0, ge=0, le=10, description="0=auto, 3-10=user specified")
+    prompt_tags: Optional[List[str]] = Field(None, description="Tags for CUSTOM mode")
+    language: Optional[str] = Field(default="ko", pattern="^(ko|en|ja|zh)$", description="Source language")
+
+
+class CreateAnalysisResponse(BaseModel):
+    """Schema for analysis creation response."""
+
+    video_id: uuid.UUID
+    analysis_id: uuid.UUID
+    analysis_no: int
+    status: str
+    message: str
+
+
+class AnalysisListItem(BaseModel):
+    """Schema for a single analysis in a list."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    analysis_id: uuid.UUID
+    analysis_no: int
+    title: str
+    option: str
+    mode: str
+    split_count: int
+    source_language: str
+    status: str
+    processing_progress: int
+    thumbnail_url: Optional[str] = None
+    token_usage: Optional[dict] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisListResponse(BaseModel):
+    """Schema for listing analyses of a video."""
+
+    video_id: uuid.UUID
+    analyses: List[AnalysisListItem]
+    total_count: int
+
+
+class AnalysisDetailResponse(BaseModel):
+    """Schema for detailed analysis result."""
+
+    analysis_id: uuid.UUID
+    analysis_no: int
+    video_id: uuid.UUID
+    title: str
+    option: str
+    mode: str
+    split_count: int
+    source_language: str
+    status: str
+    processing_progress: int
+    summary: Optional[str] = ""
+    keywords: Optional[List[str]] = []
+    segments: List[SegmentResponse] = []
+    token_usage: Optional[dict] = None
+    gcs_view_link: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisStatusResponse(BaseModel):
+    """Schema for analysis processing status."""
+
+    analysis_id: uuid.UUID
+    video_id: uuid.UUID
+    status: str
+    processing_progress: int
+
+
+class ReanalyzeSegmentInput(BaseModel):
+    """Single segment boundary for re-analysis."""
+
+    segment_no: int = Field(..., ge=1)
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}:\d{2}$")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}:\d{2}$")
+
+
+class ReanalyzeRequest(BaseModel):
+    """Request body for re-analysis with custom split points."""
+
+    segments: List[ReanalyzeSegmentInput] = Field(..., min_length=1, max_length=10)
+    language: Optional[str] = Field(default="ko", pattern="^(ko|en|ja|zh)$")
+
+
+class ReanalyzeResponse(BaseModel):
+    """Response for re-analysis request."""
+
+    video_id: uuid.UUID
+    status: str
+    message: str
+
+
+class VideoUsageResponse(BaseModel):
+    """Token usage summary for a single video."""
+
+    video_id: uuid.UUID
+    video_title: str
+    total_analyses: int
+    total_prompt_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    analyses: List[dict] = []
+
+
+class UsageSummaryResponse(BaseModel):
+    """Overall token usage summary."""
+
+    total_videos: int
+    total_analyses: int
+    total_prompt_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    by_option: dict = {}
+    by_video: List[dict] = []
+    period_start: Optional[datetime] = None
+    period_end: Optional[datetime] = None
 
 
 class ErrorResponse(BaseModel):

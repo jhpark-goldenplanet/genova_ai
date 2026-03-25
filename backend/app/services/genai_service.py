@@ -55,6 +55,16 @@ class GenAIService:
                 if not response or not response.text:
                     raise ValueError("Empty response from GenAI")
 
+                # 토큰 사용량 로깅
+                usage = getattr(response, "usage_metadata", None)
+                if usage:
+                    logger.info(
+                        f"[TOKEN_USAGE] _call_with_retry | model={self.model_name} | "
+                        f"prompt={getattr(usage, 'prompt_token_count', 0):,} | "
+                        f"output={getattr(usage, 'candidates_token_count', 0):,} | "
+                        f"total={getattr(usage, 'total_token_count', 0):,}"
+                    )
+
                 logger.info(f"GenAI generation succeeded on attempt {attempt + 1}")
                 return response
 
@@ -227,9 +237,29 @@ Rules:
             if not response or not response.text:
                 raise ValueError("Empty response from GenAI")
 
+            # 토큰 사용량 로깅
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                prompt_tokens = getattr(usage, "prompt_token_count", 0)
+                candidates_tokens = getattr(usage, "candidates_token_count", 0)
+                total_tokens = getattr(usage, "total_token_count", 0)
+                logger.info(
+                    f"[TOKEN_USAGE] model={self.model_name} | "
+                    f"prompt={prompt_tokens:,} | output={candidates_tokens:,} | "
+                    f"total={total_tokens:,}"
+                )
+            else:
+                logger.info("[TOKEN_USAGE] usage_metadata not available in response")
+
             analysis_result = self._parse_analysis_response(response.text)
             analysis_result["model_used"] = self.model_name
             analysis_result["source_language"] = source_language
+            if usage:
+                analysis_result["token_usage"] = {
+                    "prompt_tokens": prompt_tokens,
+                    "output_tokens": candidates_tokens,
+                    "total_tokens": total_tokens,
+                }
 
             logger.info(f"Video analysis completed for: {gcs_uri}")
             return analysis_result
@@ -328,6 +358,16 @@ Return ONLY the JSON array, no additional text."""
 
             if not response or not response.text:
                 raise ValueError("Empty response from GenAI")
+
+            # 토큰 사용량 로깅
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                logger.info(
+                    f"[TOKEN_USAGE] extract_segment_timings | model={self.model_name} | "
+                    f"prompt={getattr(usage, 'prompt_token_count', 0):,} | "
+                    f"output={getattr(usage, 'candidates_token_count', 0):,} | "
+                    f"total={getattr(usage, 'total_token_count', 0):,}"
+                )
 
             response_text = response.text.strip()
             json_match = re.search(r'\[[\s\S]*\]', response_text)
@@ -459,6 +499,218 @@ Return ONLY the JSON object, no additional text."""
                 "source_language": source_language,
                 "error": str(e),
             }
+
+    async def analyze_video_with_custom_segments(
+        self,
+        gcs_uri: str,
+        segments: list[dict[str, Any]],
+        source_language: str = "ko",
+        duration_seconds: int = None,
+    ) -> dict[str, Any]:
+        """
+        Analyze video with user-defined segment boundaries.
+        Segments boundaries are fixed; GenAI only generates metadata per segment.
+
+        Args:
+            gcs_uri: GCS URI of the video file
+            segments: List of segment dicts with segment_no, start_time (HH:MM:SS), end_time (HH:MM:SS)
+            source_language: Source language
+            duration_seconds: Total video duration in seconds
+
+        Returns:
+            Analysis result dict with segments containing title, summary, keywords, transcript
+        """
+        try:
+            import json
+            import re
+            import httpx
+            import tempfile
+            import os as os_module
+
+            logger.info(
+                f"Starting custom-segment analysis for {gcs_uri}, "
+                f"{len(segments)} segments, language={source_language}"
+            )
+
+            from app.services.gcs_service import gcs_service
+
+            if gcs_uri.startswith("gs://"):
+                parts = gcs_uri[5:].split("/", 1)
+                if len(parts) >= 2:
+                    gcs_path = parts[1]
+                else:
+                    raise ValueError(f"Invalid GCS URI format: {gcs_uri}")
+            else:
+                raise ValueError(f"Expected GCS URI starting with 'gs://': {gcs_uri}")
+
+            signed_url = gcs_service.generate_signed_url(gcs_path, expiration_hours=1)
+
+            # Download video and upload to GenAI Files API
+            logger.info("Downloading video from signed URL for custom-segment analysis...")
+            temp_file_path = None
+            try:
+                with httpx.Client(timeout=300) as http_client:
+                    response = http_client.get(signed_url)
+                    response.raise_for_status()
+
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+                        temp_file.write(response.content)
+                        temp_file_path = temp_file.name
+
+                client = self._get_client()
+                logger.info("Uploading video to GenAI Files API...")
+
+                uploaded_file = await asyncio.to_thread(
+                    client.files.upload,
+                    file=temp_file_path,
+                    config={"mime_type": "video/mp4"}
+                )
+
+                # Wait for file to become ACTIVE
+                max_wait_seconds = 120
+                wait_interval = 2
+                elapsed = 0
+
+                while elapsed < max_wait_seconds:
+                    file_status = await asyncio.to_thread(
+                        client.files.get,
+                        name=uploaded_file.name
+                    )
+                    if file_status.state.name == "ACTIVE":
+                        uploaded_file = file_status
+                        break
+                    elif file_status.state.name == "FAILED":
+                        raise ValueError(f"File processing failed: {file_status.state}")
+                    await asyncio.sleep(wait_interval)
+                    elapsed += wait_interval
+
+                if elapsed >= max_wait_seconds:
+                    raise ValueError(f"File processing timed out after {max_wait_seconds}s")
+
+                # Build segments info for prompt
+                segments_desc = json.dumps(
+                    [
+                        {
+                            "segment_no": s["segment_no"],
+                            "start_time": s["start_time"],
+                            "end_time": s["end_time"],
+                        }
+                        for s in segments
+                    ],
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+                prompt = f"""Analyze this video using the EXACT segment boundaries provided below.
+Do NOT change or suggest different boundaries. Use ONLY the given time ranges.
+
+SEGMENT BOUNDARIES (FIXED):
+{segments_desc}
+
+For EACH segment above, provide:
+1. title: A descriptive title (20-80 characters)
+2. summary: A 2-4 sentence summary of what happens in that time range
+3. keywords: 3-5 relevant keywords
+4. transcript: The spoken words (audio transcription) in that time range ONLY
+
+Language: {source_language}
+
+Return JSON with this EXACT structure:
+{{
+  "title": "Overall video title",
+  "summary": "Overall video summary (200-400 words)",
+  "keywords": ["keyword1", "keyword2", ...],
+  "segments": [
+    {{
+      "segment_no": 1,
+      "start_time": "HH:MM:SS",
+      "end_time": "HH:MM:SS",
+      "title": "Segment title",
+      "summary": "Segment summary",
+      "keywords": ["keyword1", "keyword2"],
+      "transcript": "Spoken words in this segment"
+    }}
+  ]
+}}
+
+CRITICAL RULES:
+- You MUST return exactly {len(segments)} segments
+- segment_no, start_time, end_time MUST match the boundaries above exactly
+- transcript: transcribe ONLY the audio spoken in each time range
+- Return ONLY the JSON object, no additional text"""
+
+                logger.info("Generating custom-segment analysis with GenAI...")
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self.model_name,
+                    contents=[prompt, uploaded_file],
+                )
+
+            finally:
+                if temp_file_path and os_module.path.exists(temp_file_path):
+                    os_module.remove(temp_file_path)
+
+            if not response or not response.text:
+                raise ValueError("Empty response from GenAI")
+
+            # Log token usage
+            usage = getattr(response, "usage_metadata", None)
+            token_usage = {}
+            if usage:
+                prompt_tokens = getattr(usage, "prompt_token_count", 0)
+                candidates_tokens = getattr(usage, "candidates_token_count", 0)
+                total_tokens = getattr(usage, "total_token_count", 0)
+                logger.info(
+                    f"[TOKEN_USAGE] custom_segment_analysis | model={self.model_name} | "
+                    f"prompt={prompt_tokens:,} | output={candidates_tokens:,} | "
+                    f"total={total_tokens:,}"
+                )
+                token_usage = {
+                    "prompt_tokens": prompt_tokens,
+                    "output_tokens": candidates_tokens,
+                    "total_tokens": total_tokens,
+                }
+
+            # Parse response
+            analysis_result = self._parse_analysis_response(response.text)
+
+            # Override segment boundaries with user input (GenAI may drift)
+            ai_segments = analysis_result.get("segments", [])
+            merged_segments = []
+            for i, user_seg in enumerate(segments):
+                ai_seg = ai_segments[i] if i < len(ai_segments) else {}
+                merged_segments.append({
+                    "segment_no": user_seg["segment_no"],
+                    "start_time": user_seg["start_time"],
+                    "end_time": user_seg["end_time"],
+                    "title": ai_seg.get("title", f"Segment {user_seg['segment_no']}"),
+                    "summary": ai_seg.get("summary", ""),
+                    "keywords": ai_seg.get("keywords", []),
+                    "transcript": ai_seg.get("transcript", ""),
+                })
+
+            analysis_result["segments"] = merged_segments
+            analysis_result["model_used"] = self.model_name
+            analysis_result["source_language"] = source_language
+            analysis_result["token_usage"] = token_usage
+
+            # Build full transcript
+            full_transcript = " ".join(
+                seg.get("transcript", "").strip()
+                for seg in merged_segments
+                if seg.get("transcript")
+            )
+            analysis_result["transcript"] = full_transcript
+
+            logger.info(f"Custom-segment analysis completed: {len(merged_segments)} segments")
+            return analysis_result
+
+        except Exception as e:
+            logger.error(f"Custom-segment analysis failed: {str(e)}", exc_info=True)
+            raise VideoProcessingException(
+                ErrorCodes.AI_SERVICE_ERROR,
+                f"Custom-segment AI analysis failed: {str(e)}"
+            )
 
     def _parse_analysis_response(self, response_text: str) -> dict[str, Any]:
         """

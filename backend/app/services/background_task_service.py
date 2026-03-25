@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import UploadFile
 
 import aiofiles
+import ffmpeg
 
 from app.core.background_exceptions import (
     BackgroundTaskException,
@@ -172,7 +173,8 @@ class BackgroundTaskManager:
         logger.info(f"Started background processing for video {video_id_str} from URL")
 
     async def start_video_processing_from_gcs(
-        self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko"
+        self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko",
+        split_count: Optional[int] = None, analysis_id: Optional[UUID] = None,
     ) -> None:
         """
         Start video processing pipeline for a video already uploaded to GCS.
@@ -221,7 +223,7 @@ class BackgroundTaskManager:
 
         # Create background task
         task = asyncio.create_task(
-            self._process_video_from_gcs(video_id, gcs_path, language),
+            self._process_video_from_gcs(video_id, gcs_path, language, split_count=split_count, analysis_id=analysis_id),
             name=f"process_video_gcs_{video_id_str}",
         )
 
@@ -236,14 +238,16 @@ class BackgroundTaskManager:
 
         logger.info(f"Started background processing for video {video_id_str} from GCS")
 
-    async def _run_ai_pipeline(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko") -> None:
+    async def _run_ai_pipeline(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None) -> None:
         """Runs the sequential AI processing steps."""
         video_id_str = str(video_id)
-        logger.info(f"[{video_id_str}] Starting AI pipeline.")
+        logger.info(f"[{video_id_str}] Starting AI pipeline. analysis_id={analysis_id}")
 
         # Step 3: AI Analysis and Summary Generation (50% progress)
         logger.info(f"[{video_id_str}] Step 3: Starting AI analysis.")
-        await self._ai_analysis_step(video_id, local_video_path, language)
+        if analysis_id:
+            await self._update_analysis_status(analysis_id, "IN_PROGRESS", 40)
+        await self._ai_analysis_step(video_id, local_video_path, language, split_count=split_count, analysis_id=analysis_id)
         logger.info(f"[{video_id_str}] Step 3: AI analysis complete.")
 
         # Step 4: Speech-to-Text Transcription (80% progress)
@@ -251,10 +255,19 @@ class BackgroundTaskManager:
         await self._transcription_step(video_id, local_video_path)
         logger.info(f"[{video_id_str}] Step 4: Transcription complete.")
 
-        # Step 5: Video Segmentation (90% progress)
+        # Step 5: Video Segmentation (85% progress)
         logger.info(f"[{video_id_str}] Step 5: Starting video segmentation.")
-        await self._segmentation_step(video_id, local_video_path)
+        if analysis_id:
+            await self._update_analysis_status(analysis_id, "IN_PROGRESS", 70)
+        await self._segmentation_step(video_id, local_video_path, analysis_id=analysis_id)
         logger.info(f"[{video_id_str}] Step 5: Video segmentation complete.")
+
+        # Step 6: Thumbnail generation + Segment file splitting & GCS upload (95% progress)
+        logger.info(f"[{video_id_str}] Step 6: Starting thumbnail & segment file generation.")
+        if analysis_id:
+            await self._update_analysis_status(analysis_id, "IN_PROGRESS", 85)
+        await self._generate_assets_step(video_id, local_video_path, analysis_id=analysis_id)
+        logger.info(f"[{video_id_str}] Step 6: Thumbnail & segment file generation complete.")
 
         # Translation is now handled on-demand via API, not in the processing pipeline
 
@@ -511,7 +524,7 @@ class BackgroundTaskManager:
             # Clean up task references
             self._cleanup_task(video_id_str)
 
-    async def _process_video_from_gcs(self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko") -> None:
+    async def _process_video_from_gcs(self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None) -> None:
         """
         Main video processing pipeline for videos already in GCS (direct upload via signed URL).
 
@@ -531,6 +544,10 @@ class BackgroundTaskManager:
             self.current_video_url = None
             self.is_youtube_video = False
 
+            # Update analysis status if provided
+            if analysis_id:
+                await self._update_analysis_status(analysis_id, "IN_PROGRESS", 5)
+
             # Step 1: Download from GCS to local temp file (10% progress)
             logger.info(f"[{video_id_str}] Step 1: Downloading from GCS.")
             temp_file_path = await self._download_from_gcs_step(video_id, gcs_path)
@@ -541,16 +558,21 @@ class BackgroundTaskManager:
             await self._extract_metadata_step(video_id, temp_file_path)
             logger.info(f"[{video_id_str}] Step 2: Extracting video metadata complete.")
 
+            if analysis_id:
+                await self._update_analysis_status(analysis_id, "IN_PROGRESS", 30)
+
             # Steps 3-6: Run AI Pipeline
-            await self._run_ai_pipeline(video_id, temp_file_path, language)
+            await self._run_ai_pipeline(video_id, temp_file_path, language, split_count=split_count, analysis_id=analysis_id)
 
             # Step 7: Finalize and save results (100% progress)
             logger.info(f"[{video_id_str}] Step 7: Finalizing processing.")
-            await self._finalization_step(video_id)
+            await self._finalization_step(video_id, analysis_id=analysis_id)
             logger.info(f"[{video_id_str}] Step 7: Finalization complete.")
 
             # Mark as complete
             await video_status_service.complete_processing(video_id)
+            if analysis_id:
+                await self._update_analysis_status(analysis_id, "COMPLETE", 100)
 
             # Reset retry count on success
             await self._reset_retry_count(video_id_str)
@@ -562,6 +584,8 @@ class BackgroundTaskManager:
             await video_status_service.fail_processing(
                 video_id, "Processing was cancelled due to timeout"
             )
+            if analysis_id:
+                await self._update_analysis_status(analysis_id, "FAILED", 0)
             raise
         except Exception as e:
             # Use enhanced error handling with recovery
@@ -1156,7 +1180,7 @@ class BackgroundTaskManager:
                 f"Failed to extract video metadata: {str(e)}"
             )
 
-    async def _ai_analysis_step(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko") -> None:
+    async def _ai_analysis_step(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None) -> None:
         """Perform AI analysis and summary generation (with YouTube caption support)."""
         await video_status_service.update_processing_step(video_id, "SUMMARIZATION", 50)
 
@@ -1225,8 +1249,22 @@ class BackgroundTaskManager:
 
                     logger.info(f"AI orchestrator completed, storing results for video {video_id}")
 
-                    # Store AI analysis results in database
+                    # Store AI analysis results in video table (backward compatibility)
                     await video_service.update_video_analysis(video_id, ai_results)
+
+                    # Store results in analyses table if analysis_id provided
+                    if analysis_id:
+                        from app.repositories.analysis_repository import AnalysisRepository
+                        analysis_repo = AnalysisRepository(session)
+                        await analysis_repo.update_results(
+                            analysis_id=analysis_id,
+                            summary=ai_results.get("analysis", {}).get("summary"),
+                            keywords=ai_results.get("analysis", {}).get("keywords"),
+                            analysis_result=ai_results.get("analysis"),
+                            token_usage=ai_results.get("analysis", {}).get("token_usage"),
+                        )
+                        await session.commit()
+                        logger.info(f"Stored AI results in analysis {analysis_id}")
 
                     # Store processing metadata in Redis
                     await video_status_service.store_processing_metadata(
@@ -1236,7 +1274,6 @@ class BackgroundTaskManager:
                     logger.info(f"AI analysis completed successfully for video {video_id}")
 
                 finally:
-                    # The temporary file is no longer cleaned up here, but in the main processing function
                     pass
 
         except Exception as e:
@@ -1298,7 +1335,7 @@ class BackgroundTaskManager:
                 f"Transcription step failed: {str(e)}"
             )
 
-    async def _segmentation_step(self, video_id: UUID, local_video_path: str) -> None:
+    async def _segmentation_step(self, video_id: UUID, local_video_path: str, analysis_id: Optional[UUID] = None) -> None:
         """Generate video segments."""
         await video_status_service.update_processing_step(video_id, "SEGMENTING", 90)
         
@@ -1347,9 +1384,13 @@ class BackgroundTaskManager:
                         transcription=transcription_metadata
                     )
                     
-                    # Save segments to database
-                    await segment_repository.create_segments(video_id, segments)
-                    
+                    # Save segments to database (with analysis_id if provided)
+                    created_segments = await segment_repository.create_segments(video_id, segments)
+                    if analysis_id and created_segments:
+                        for seg in created_segments:
+                            seg.analysis_id = analysis_id
+                        await session.flush()
+
                     # Update video with metadata
                     await video_service.update_video_metadata(video_id, {
                         "duration_seconds": metadata.get("duration_seconds"),
@@ -1495,7 +1536,154 @@ class BackgroundTaskManager:
                 video_id, {"translation_error": {"error": str(e)}}
             )
 
-    async def _finalization_step(self, video_id: UUID) -> None:
+    async def _generate_assets_step(self, video_id: UUID, local_video_path: str, analysis_id: Optional[UUID] = None) -> None:
+        """Generate thumbnail and split segment files, then upload all to GCS."""
+        await video_status_service.update_processing_step(video_id, "GENERATING_ASSETS", 92)
+
+        try:
+            import tempfile
+            import asyncio
+            from app.core.database import db_manager
+            from app.repositories.segment_repository import SegmentRepository
+            from app.services.gcs_service import gcs_service
+
+            async with db_manager.get_session_context() as session:
+                video_service = VideoService(session)
+                segment_repo = SegmentRepository(session)
+                video = await video_service.get_video_by_id(video_id)
+                segments = await segment_repo.get_segments_by_video_id(video_id)
+
+                if not segments:
+                    logger.warning(f"No segments found for video {video_id}, skipping asset generation")
+                    return
+
+                # --- Thumbnail generation ---
+                try:
+                    thumbnail_data = await asyncio.to_thread(
+                        self._extract_thumbnail_frame, local_video_path
+                    )
+                    if thumbnail_data:
+                        thumb_path, thumb_meta = await gcs_service.upload_thumbnail(
+                            thumbnail_data, video_id
+                        )
+                        # Save to video table (backward compatibility)
+                        await video_service.update_video_metadata(video_id, {
+                            "thumbnail_gcs_path": thumb_path
+                        })
+                        # Save to analyses table if analysis_id provided
+                        if analysis_id:
+                            from app.repositories.analysis_repository import AnalysisRepository
+                            analysis_repo = AnalysisRepository(session)
+                            await analysis_repo.update(analysis_id, {"thumbnail_gcs_path": thumb_path})
+                            await session.commit()
+                        logger.info(f"[{video_id}] Thumbnail uploaded: {thumb_path}")
+                except Exception as thumb_err:
+                    logger.warning(f"[{video_id}] Thumbnail generation failed (non-fatal): {thumb_err}")
+
+                # --- Segment file splitting & upload ---
+                await video_status_service.update_processing_step(video_id, "SPLITTING_SEGMENTS", 94)
+                temp_dir = tempfile.gettempdir()
+                temp_files = []
+
+                try:
+                    from app.services.video_splitting_service import VideoSplittingService
+                    splitter = VideoSplittingService(gcs_service=gcs_service)
+
+                    for seg in segments:
+                        seg_filename = f"segment_{video_id}_{seg.segment_no:02d}.mp4"
+                        seg_path = os.path.join(temp_dir, seg_filename)
+                        temp_files.append(seg_path)
+
+                        await asyncio.to_thread(
+                            splitter._create_segment_file,
+                            input_path=local_video_path,
+                            output_path=seg_path,
+                            start_time=seg.start_time,
+                            end_time=seg.end_time,
+                        )
+
+                        with open(seg_path, 'rb') as f:
+                            segment_data = f.read()
+
+                        gcs_path, metadata = await gcs_service.upload_segment(
+                            segment_data=segment_data,
+                            video_id=video_id,
+                            segment_no=seg.segment_no,
+                            content_type="video/mp4",
+                        )
+
+                        # Update segment record with gcs_path
+                        seg.gcs_path = gcs_path
+                        session.add(seg)
+
+                        logger.info(
+                            f"[{video_id}] Segment {seg.segment_no} uploaded: "
+                            f"{gcs_path} ({metadata['size_bytes']:,} bytes)"
+                        )
+
+                    await session.commit()
+                    logger.info(f"[{video_id}] All {len(segments)} segment files uploaded to GCS")
+
+                finally:
+                    for tmp in temp_files:
+                        try:
+                            if os.path.exists(tmp):
+                                os.remove(tmp)
+                        except Exception:
+                            pass
+
+        except Exception as e:
+            logger.error(f"Asset generation failed for video {video_id}: {str(e)}", exc_info=True)
+            await video_status_service.store_processing_metadata(
+                video_id, {"asset_generation_error": {"error": str(e)}}
+            )
+
+    @staticmethod
+    def _extract_thumbnail_frame(video_path: str) -> Optional[bytes]:
+        """Extract a frame from the video at 10% position as JPEG thumbnail."""
+        import subprocess
+        import tempfile
+
+        try:
+            # Get duration
+            probe = ffmpeg.probe(video_path)
+            duration = float(probe['format']['duration'])
+            seek_time = duration * 0.1  # 10% position
+
+            # Extract frame
+            tmp_thumb = os.path.join(tempfile.gettempdir(), f"thumb_{os.getpid()}.jpg")
+            (
+                ffmpeg
+                .input(video_path, ss=seek_time)
+                .output(tmp_thumb, vframes=1, **{'q:v': 2})
+                .overwrite_output()
+                .run(quiet=True)
+            )
+
+            with open(tmp_thumb, 'rb') as f:
+                data = f.read()
+
+            os.remove(tmp_thumb)
+            return data
+
+        except Exception as e:
+            logger.warning(f"Failed to extract thumbnail frame: {e}")
+            return None
+
+    async def _update_analysis_status(self, analysis_id: UUID, status: str, progress: int = 0) -> None:
+        """Update analysis status in DB."""
+        try:
+            from app.core.database import db_manager
+            from app.repositories.analysis_repository import AnalysisRepository
+
+            async with db_manager.get_session_context() as session:
+                repo = AnalysisRepository(session)
+                await repo.update_status(analysis_id, status, progress)
+                await session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to update analysis {analysis_id} status to {status}: {e}")
+
+    async def _finalization_step(self, video_id: UUID, analysis_id: Optional[UUID] = None) -> None:
         """Finalize processing and save results."""
         await video_status_service.update_processing_step(video_id, "FINALIZING", 99)
         
@@ -1510,9 +1698,19 @@ class BackgroundTaskManager:
                 # Consolidate all processing results
                 ai_metadata = await video_status_service.get_processing_metadata(video_id)
                 
+                # Save token_usage from AI analysis to DB
+                token_usage = None
+                if ai_metadata and ai_metadata.get("ai_analysis"):
+                    token_usage = ai_metadata["ai_analysis"].get("token_usage")
+                if token_usage:
+                    video.token_usage = token_usage
+                    session.add(video)
+                    await session.commit()
+                    logger.info(f"[{video_id}] Token usage saved: {token_usage}")
+
                 # Update video status to COMPLETE in database
                 await video_service.update_video_status(video_id, "COMPLETE", 100)
-                
+
                 # Store final processing summary in Redis
                 final_summary = {
                     "processing_completed_at": datetime.now(timezone.utc).isoformat(),
@@ -1600,6 +1798,267 @@ class BackgroundTaskManager:
             await redis_manager.client.delete(retry_key)
         except Exception as e:
             logger.warning(f"Failed to reset retry count for {video_id_str}: {str(e)}")
+
+
+    async def start_reanalysis(
+        self, video_id: UUID, segments: list[dict], language: str = "ko"
+    ) -> None:
+        """
+        Start re-analysis pipeline with user-defined segment boundaries.
+
+        Args:
+            video_id: Video identifier
+            segments: List of segment dicts with segment_no, start_time, end_time
+            language: Language for analysis
+        """
+        video_id_str = str(video_id)
+
+        if video_id_str in self.active_tasks:
+            logger.warning(f"Task already running for video {video_id_str}")
+            return
+
+        await video_status_service.initialize_video_processing(video_id)
+
+        task = asyncio.create_task(
+            self._process_reanalysis(video_id, segments, language),
+            name=f"reanalyze_{video_id_str}",
+        )
+
+        self.active_tasks[video_id_str] = task
+
+        timeout_task = asyncio.create_task(
+            self._handle_task_timeout(video_id_str),
+            name=f"timeout_reanalyze_{video_id_str}",
+        )
+        self.task_timeouts[video_id_str] = timeout_task
+
+        logger.info(f"Started re-analysis for video {video_id_str} with {len(segments)} custom segments")
+
+    async def _process_reanalysis(
+        self, video_id: UUID, segments: list[dict], language: str = "ko"
+    ) -> None:
+        """
+        Re-analysis pipeline: AI analysis with fixed segment boundaries → replace segments → split files.
+
+        Args:
+            video_id: Video identifier
+            segments: User-defined segment boundaries
+            language: Source language
+        """
+        video_id_str = str(video_id)
+        temp_file_path = None
+
+        try:
+            await video_status_service.start_processing(video_id)
+            logger.info(f"[{video_id_str}] Starting re-analysis pipeline with {len(segments)} custom segments")
+
+            # Step 1: Get video info and download from GCS (20%)
+            await video_status_service.update_processing_step(video_id, "DOWNLOADING", 10)
+
+            from app.core.database import db_manager
+            async with db_manager.get_session_context() as session:
+                video_service = VideoService(session)
+                video = await video_service.get_video_by_id(video_id)
+                gcs_path = video.gcs_path
+                duration_seconds = video.duration_seconds
+
+            if not gcs_path:
+                raise VideoProcessingException(
+                    ErrorCodes.PROCESSING_FAILED,
+                    "Video GCS path not found"
+                )
+
+            temp_file_path = await self._download_from_gcs_step(video_id, gcs_path)
+            logger.info(f"[{video_id_str}] Step 1: Video downloaded from GCS")
+
+            # Step 2: AI Analysis with custom segments (60%)
+            await video_status_service.update_processing_step(video_id, "SUMMARIZATION", 30)
+
+            from app.services.genai_service import genai_service
+            bucket_name = gcs_service.bucket_name
+            gcs_uri = f"gs://{bucket_name}/{gcs_path}"
+
+            segments_for_ai = [
+                {
+                    "segment_no": s["segment_no"],
+                    "start_time": s["start_time"],
+                    "end_time": s["end_time"],
+                }
+                for s in segments
+            ]
+
+            ai_results = await genai_service.analyze_video_with_custom_segments(
+                gcs_uri=gcs_uri,
+                segments=segments_for_ai,
+                source_language=language,
+                duration_seconds=duration_seconds,
+            )
+            logger.info(f"[{video_id_str}] Step 2: AI analysis completed")
+
+            # Store AI results in Redis
+            await video_status_service.store_processing_metadata(
+                video_id, {"ai_analysis": ai_results}
+            )
+
+            # Step 3: Delete old segments (DB + GCS) and create new ones (80%)
+            await video_status_service.update_processing_step(video_id, "SEGMENTING", 65)
+
+            from app.repositories.segment_repository import SegmentRepository
+            async with db_manager.get_session_context() as session:
+                segment_repo = SegmentRepository(session)
+                video_service = VideoService(session)
+
+                # Delete old segment GCS files
+                old_segments = await segment_repo.get_segments_by_video_id(video_id)
+                for old_seg in old_segments:
+                    if old_seg.gcs_path:
+                        try:
+                            await gcs_service.delete_file(old_seg.gcs_path)
+                            logger.info(f"[{video_id_str}] Deleted old segment GCS file: {old_seg.gcs_path}")
+                        except Exception as del_err:
+                            logger.warning(f"[{video_id_str}] Failed to delete GCS file {old_seg.gcs_path}: {del_err}")
+
+                # Delete old segments from DB
+                deleted_count = await segment_repo.delete_segments_by_video_id(video_id)
+                logger.info(f"[{video_id_str}] Deleted {deleted_count} old segments from DB")
+
+                # Create new segments from AI results
+                ai_segments = ai_results.get("segments", [])
+                new_segments_data = []
+                for i, user_seg in enumerate(segments):
+                    ai_seg = ai_segments[i] if i < len(ai_segments) else {}
+                    seg_count = len(segments)
+                    if i == 0:
+                        class_type = "introduction"
+                    elif i == seg_count - 1:
+                        class_type = "conclusion"
+                    else:
+                        class_type = "content"
+
+                    new_segments_data.append({
+                        "segment_no": user_seg["segment_no"],
+                        "start_time": user_seg["start_time"],
+                        "end_time": user_seg["end_time"],
+                        "title": ai_seg.get("title", f"Segment {user_seg['segment_no']}"),
+                        "summary": ai_seg.get("summary", ""),
+                        "keywords": ai_seg.get("keywords", []),
+                        "scripts": ai_seg.get("transcript", ""),
+                        "class_type": class_type,
+                        "source_language": language,
+                    })
+
+                created_segments = await segment_repo.create_segments(video_id, new_segments_data)
+                logger.info(f"[{video_id_str}] Created {len(created_segments)} new segments")
+
+                # Update video summary/keywords from AI results
+                update_data = {}
+                if ai_results.get("summary"):
+                    update_data["summary"] = ai_results["summary"]
+                if ai_results.get("keywords"):
+                    update_data["keywords"] = ai_results["keywords"]
+                if ai_results.get("transcript"):
+                    update_data["transcription_result"] = ai_results["transcript"]
+                if ai_results.get("token_usage"):
+                    video_obj = await video_service.get_video_by_id(video_id)
+                    video_obj.token_usage = ai_results["token_usage"]
+                    session.add(video_obj)
+
+                if update_data:
+                    await video_service.update_video_metadata(video_id, update_data)
+
+            logger.info(f"[{video_id_str}] Step 3: Segments replaced in DB")
+
+            # Step 4: FFmpeg split + GCS upload (95%)
+            await video_status_service.update_processing_step(video_id, "SPLITTING_SEGMENTS", 85)
+
+            async with db_manager.get_session_context() as session:
+                segment_repo = SegmentRepository(session)
+                new_segments = await segment_repo.get_segments_by_video_id(video_id)
+
+                from app.services.video_splitting_service import VideoSplittingService
+                splitter = VideoSplittingService(gcs_service=gcs_service)
+                temp_dir = os.path.join(os.path.dirname(temp_file_path), "")
+                temp_files = []
+
+                for seg in new_segments:
+                    seg_filename = f"segment_{video_id}_{seg.segment_no:02d}.mp4"
+                    seg_path = os.path.join(temp_dir, seg_filename)
+                    temp_files.append(seg_path)
+
+                    await asyncio.to_thread(
+                        splitter._create_segment_file,
+                        input_path=temp_file_path,
+                        output_path=seg_path,
+                        start_time=seg.start_time,
+                        end_time=seg.end_time,
+                    )
+
+                    with open(seg_path, 'rb') as f:
+                        segment_data = f.read()
+
+                    seg_gcs_path, metadata = await gcs_service.upload_segment(
+                        segment_data=segment_data,
+                        video_id=video_id,
+                        segment_no=seg.segment_no,
+                        content_type="video/mp4",
+                    )
+
+                    seg.gcs_path = seg_gcs_path
+                    session.add(seg)
+                    logger.info(
+                        f"[{video_id_str}] Segment {seg.segment_no} uploaded: "
+                        f"{seg_gcs_path} ({metadata['size_bytes']:,} bytes)"
+                    )
+
+                await session.commit()
+
+                # Clean up temp segment files
+                for tmp in temp_files:
+                    try:
+                        if os.path.exists(tmp):
+                            os.remove(tmp)
+                    except Exception:
+                        pass
+
+            logger.info(f"[{video_id_str}] Step 4: Segment files split and uploaded")
+
+            # Step 5: Finalization (100%)
+            await self._finalization_step(video_id)
+            await video_status_service.complete_processing(video_id)
+            await self._reset_retry_count(video_id_str)
+
+            logger.info(f"[{video_id_str}] Re-analysis completed successfully")
+
+        except asyncio.CancelledError:
+            logger.warning(f"Re-analysis cancelled for {video_id_str}")
+            await video_status_service.fail_processing(
+                video_id, "Re-analysis was cancelled due to timeout"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Re-analysis failed for {video_id_str}: {str(e)}", exc_info=True)
+            try:
+                from app.services.error_recovery_service import error_recovery_service
+                processed_exc = await exception_handler.handle_exception(
+                    e, video_id=video_id, step="REANALYSIS_PIPELINE"
+                )
+                error_msg = f"{processed_exc.category}: {processed_exc.detail['message']}"
+                await video_status_service.fail_processing(
+                    video_id, error_msg,
+                    error_code=processed_exc.error_code,
+                    http_status=processed_exc.status_code,
+                )
+            except Exception:
+                await video_status_service.fail_processing(
+                    video_id, f"Re-analysis failed: {str(e)}"
+                )
+        finally:
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except Exception:
+                    pass
+            self._cleanup_task(video_id_str)
 
 
 # Global background task manager instance

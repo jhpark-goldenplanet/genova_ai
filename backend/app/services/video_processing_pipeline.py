@@ -108,7 +108,8 @@ class VideoProcessingPipeline:
             )
 
     async def start_processing_from_gcs(
-        self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko"
+        self, video_id: UUID, gcs_path: str, language: Optional[str] = "ko",
+        split_count: Optional[int] = None, analysis_id: Optional[UUID] = None,
     ) -> None:
         """
         Start the complete video processing pipeline for a video already in GCS.
@@ -129,7 +130,8 @@ class VideoProcessingPipeline:
 
             # Start background processing
             await background_task_manager.start_video_processing_from_gcs(
-                video_id, gcs_path, language
+                video_id, gcs_path, language,
+                split_count=split_count, analysis_id=analysis_id,
             )
 
         except Exception as e:
@@ -140,6 +142,31 @@ class VideoProcessingPipeline:
             raise VideoProcessingException(
                 ErrorCodes.PROCESSING_FAILED,
                 f"Failed to start video processing: {str(e)}",
+                status_code=500,
+            )
+
+    async def start_reanalysis(
+        self, video_id: UUID, segments: list[dict], language: str = "ko"
+    ) -> None:
+        """
+        Start re-analysis pipeline with user-defined segment boundaries.
+
+        Args:
+            video_id: Video identifier
+            segments: List of segment dicts with segment_no, start_time, end_time
+            language: Source language for analysis
+        """
+        try:
+            logger.info(f"Starting re-analysis pipeline for {video_id} with {len(segments)} segments")
+            await background_task_manager.start_reanalysis(video_id, segments, language)
+        except Exception as e:
+            logger.error(f"Failed to start re-analysis for {video_id}: {str(e)}")
+            await video_status_service.fail_processing(
+                video_id, f"Failed to start re-analysis: {str(e)}"
+            )
+            raise VideoProcessingException(
+                ErrorCodes.PROCESSING_FAILED,
+                f"Failed to start re-analysis: {str(e)}",
                 status_code=500,
             )
 
