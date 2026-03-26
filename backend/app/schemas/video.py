@@ -244,6 +244,8 @@ class ConfirmUploadRequest(BaseModel):
     mode: Optional[str] = Field(default="AUTO", pattern="^(AUTO|CUSTOM)$", description="AUTO or CUSTOM")
     split_count: Optional[int] = Field(default=0, ge=0, le=10, description="0=auto, 3-10=specified")
     prompt_tags: Optional[List[str]] = Field(default=None, description="Tags for CUSTOM mode")
+    preset_name: Optional[str] = Field(default=None, max_length=100, description="Preset name for reuse")
+    preset: Optional[dict] = Field(default=None, description="Preset settings: {summaryDensity, analysisFocus, scriptStyle, tone}")
 
 
 class CreateAnalysisRequest(BaseModel):
@@ -254,6 +256,8 @@ class CreateAnalysisRequest(BaseModel):
     mode: str = Field(default="AUTO", pattern="^(AUTO|CUSTOM)$", description="AUTO or CUSTOM")
     split_count: int = Field(default=0, ge=0, le=10, description="0=auto, 3-10=user specified")
     prompt_tags: Optional[List[str]] = Field(None, description="Tags for CUSTOM mode")
+    preset_name: Optional[str] = Field(None, max_length=100, description="Preset name for reuse")
+    preset: Optional[dict] = Field(None, description="Preset settings: {summaryDensity, analysisFocus, scriptStyle, tone}")
     language: Optional[str] = Field(default="ko", pattern="^(ko|en|ja|zh)$", description="Source language")
 
 
@@ -404,6 +408,22 @@ class VideoListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PromptPresetItem(BaseModel):
+    """A unique preset extracted from analysis history."""
+
+    preset_name: str
+    tags: List[str]
+    use_count: int = 0
+    last_used_at: Optional[datetime] = None
+
+
+class PromptPresetListResponse(BaseModel):
+    """List of prompt presets from analysis history."""
+
+    presets: List[PromptPresetItem]
+    total: int
 
 
 class ErrorResponse(BaseModel):

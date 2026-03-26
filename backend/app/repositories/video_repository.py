@@ -13,6 +13,9 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import DatabaseException
 from app.models.video import Segment, Video
 
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+DEFAULT_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
+
 
 class VideoRepository:
     """Repository for video database operations."""
@@ -47,6 +50,8 @@ class VideoRepository:
                 **video_data,
                 duration_seconds=duration_seconds,
                 file_size_bytes=file_size_bytes,
+                org_id=DEFAULT_ORG_ID,
+                workspace_id=DEFAULT_WORKSPACE_ID,
             )
 
             # Store source URL in analysis_result for URL uploads

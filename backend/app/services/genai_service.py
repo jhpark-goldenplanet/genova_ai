@@ -87,7 +87,7 @@ class GenAIService:
             error_msg
         )
 
-    async def analyze_video(self, gcs_uri: str, source_language: str = "ko", duration_seconds: int = None) -> dict[str, Any]:
+    async def analyze_video(self, gcs_uri: str, source_language: str = "ko", duration_seconds: int = None, split_count: int = None, preset: dict = None) -> dict[str, Any]:
         """
         Analyze video content from a GCS URI using Google GenAI SDK.
         Converts GCS URI to signed URL for GenAI access.
@@ -190,11 +190,19 @@ class GenAIService:
 - Segments MUST cover the ENTIRE video from 0:00 to {duration_str}
 - Do NOT stop analysis early - analyze the COMPLETE video"""
 
+                # Build split count instruction
+                split_instruction = f"Create EXACTLY {split_count} segments" if split_count else "Create 2-10 segments based on content structure"
+
+                # Build preset instructions
+                from app.core.prompt_preset import build_preset_prompt
+                preset_instructions = build_preset_prompt(preset, source_language)
+                preset_block = f"\n{preset_instructions}\n" if preset_instructions else ""
+
                 prompt = f"""Analyze this video and provide analysis in JSON format.
 
 Language: {source_language}
 {duration_requirement}
-
+{preset_block}
 Return JSON with this structure:
 {{
   "title": "Video title",
@@ -217,7 +225,7 @@ Rules:
 - Use MM:SS format for timestamps
 - First segment MUST start at 0:00
 - Last segment MUST end at the exact video duration ({duration_str if duration_str else 'end of video'})
-- Create 2-10 segments based on content structure
+- {split_instruction}
 - Ensure NO gaps between segments - every second must be covered
 - transcript: ONLY spoken audio, not screen text"""
 

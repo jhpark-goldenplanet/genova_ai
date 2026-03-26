@@ -238,16 +238,30 @@ class BackgroundTaskManager:
 
         logger.info(f"Started background processing for video {video_id_str} from GCS")
 
-    async def _run_ai_pipeline(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None) -> None:
+    async def _run_ai_pipeline(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None, preset: Optional[dict] = None) -> None:
         """Runs the sequential AI processing steps."""
         video_id_str = str(video_id)
-        logger.info(f"[{video_id_str}] Starting AI pipeline. analysis_id={analysis_id}")
+        logger.info(f"[{video_id_str}] Starting AI pipeline. analysis_id={analysis_id}, preset={preset is not None}")
+
+        # Load preset from analysis DB if not provided but analysis_id exists
+        if not preset and analysis_id:
+            try:
+                from app.core.database import db_manager
+                from app.repositories.analysis_repository import AnalysisRepository
+                async with db_manager.get_session_context() as session:
+                    repo = AnalysisRepository(session)
+                    analysis = await repo.get_by_id(analysis_id)
+                    if analysis and analysis.preset:
+                        preset = analysis.preset
+                        logger.info(f"[{video_id_str}] Loaded preset from analysis: {preset}")
+            except Exception as e:
+                logger.warning(f"[{video_id_str}] Failed to load preset from analysis: {e}")
 
         # Step 3: AI Analysis and Summary Generation (50% progress)
         logger.info(f"[{video_id_str}] Step 3: Starting AI analysis.")
         if analysis_id:
             await self._update_analysis_status(analysis_id, "IN_PROGRESS", 40)
-        await self._ai_analysis_step(video_id, local_video_path, language, split_count=split_count, analysis_id=analysis_id)
+        await self._ai_analysis_step(video_id, local_video_path, language, split_count=split_count, analysis_id=analysis_id, preset=preset)
         logger.info(f"[{video_id_str}] Step 3: AI analysis complete.")
 
         # Step 4: Speech-to-Text Transcription (80% progress)
@@ -1180,7 +1194,7 @@ class BackgroundTaskManager:
                 f"Failed to extract video metadata: {str(e)}"
             )
 
-    async def _ai_analysis_step(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None) -> None:
+    async def _ai_analysis_step(self, video_id: UUID, local_video_path: str, language: Optional[str] = "ko", split_count: Optional[int] = None, analysis_id: Optional[UUID] = None, preset: Optional[dict] = None) -> None:
         """Perform AI analysis and summary generation (with YouTube caption support)."""
         await video_status_service.update_processing_step(video_id, "SUMMARIZATION", 50)
 
@@ -1244,7 +1258,8 @@ class BackgroundTaskManager:
                     else:
                         logger.info(f"Using standard video processing for video {video_id}")
                         ai_results = await ai_orchestrator.process_video_with_ai(
-                            video_id, local_video_path, session, source_language=language
+                            video_id, local_video_path, session, source_language=language,
+                            split_count=split_count, preset=preset,
                         )
 
                     logger.info(f"AI orchestrator completed, storing results for video {video_id}")
@@ -1256,15 +1271,16 @@ class BackgroundTaskManager:
                     if analysis_id:
                         from app.repositories.analysis_repository import AnalysisRepository
                         analysis_repo = AnalysisRepository(session)
+
                         await analysis_repo.update_results(
                             analysis_id=analysis_id,
-                            summary=ai_results.get("analysis", {}).get("summary"),
-                            keywords=ai_results.get("analysis", {}).get("keywords"),
-                            analysis_result=ai_results.get("analysis"),
-                            token_usage=ai_results.get("analysis", {}).get("token_usage"),
+                            summary=ai_results.get("summary"),
+                            keywords=ai_results.get("keywords"),
+                            analysis_result=ai_results,
+                            token_usage=ai_results.get("token_usage"),
                         )
                         await session.commit()
-                        logger.info(f"Stored AI results in analysis {analysis_id}")
+                        logger.info(f"Stored AI results in analysis {analysis_id}, token_usage={ai_results.get('token_usage')}")
 
                     # Store processing metadata in Redis
                     await video_status_service.store_processing_metadata(

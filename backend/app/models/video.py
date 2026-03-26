@@ -4,13 +4,17 @@ Video and Segment database models for the Genova AI Backend.
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.analysis import Analysis
+    from app.models.organization import Organization, Workspace
 
 
 class Video(Base):
@@ -21,6 +25,14 @@ class Video(Base):
     # Primary key
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    # Organization and workspace (nullable for backward compatibility)
+    org_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True
     )
 
     # Basic video information
@@ -51,6 +63,9 @@ class Video(Base):
     # Source language
     source_language: Mapped[str] = mapped_column(String(10), default="ko", nullable=False)
 
+    # Token usage from AI processing
+    token_usage: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -58,6 +73,11 @@ class Video(Base):
     )
 
     # Relationships
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", back_populates="videos")
+    workspace: Mapped[Optional["Workspace"]] = relationship("Workspace", back_populates="videos")
+    analyses: Mapped[list["Analysis"]] = relationship(
+        "Analysis", back_populates="video", cascade="all, delete-orphan"
+    )
     segments: Mapped[list["Segment"]] = relationship(
         "Segment", back_populates="video", cascade="all, delete-orphan"
     )
@@ -82,6 +102,11 @@ class Segment(Base):
     # Foreign key to video
     video_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Foreign key to analysis (nullable for backward compatibility)
+    analysis_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=True
     )
 
     # Segment information
@@ -109,8 +134,14 @@ class Segment(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
+    # GCS storage path for the segment file
+    gcs_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     # Relationships
     video: Mapped["Video"] = relationship("Video", back_populates="segments")
+    analysis: Mapped[Optional["Analysis"]] = relationship(
+        "Analysis", back_populates="segments", foreign_keys=[analysis_id]
+    )
     translations: Mapped[list["SegmentTranslation"]] = relationship(
         "SegmentTranslation", back_populates="segment", cascade="all, delete-orphan"
     )

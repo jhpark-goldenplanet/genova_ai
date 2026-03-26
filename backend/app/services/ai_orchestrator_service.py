@@ -34,6 +34,8 @@ class AIOrchestrator:
         video_path: str,
         session: AsyncSession,
         source_language: Optional[str] = "ko",
+        split_count: Optional[int] = None,
+        preset: Optional[dict] = None,
     ) -> dict[str, Any]:
         """
         Process video with Vertex AI and return analysis results (no translation).
@@ -81,7 +83,9 @@ class AIOrchestrator:
                 analysis_result = await self.genai.analyze_video(
                     gcs_uri,
                     source_language=source_language,
-                    duration_seconds=video.duration_seconds
+                    duration_seconds=video.duration_seconds,
+                    split_count=split_count,
+                    preset=preset,
                 )
                 results["analysis"] = analysis_result
 
@@ -358,6 +362,9 @@ class AIOrchestrator:
                 "transcription_confidence": original_transcription.get("confidence", 0.0),
                 "transcription_language": original_transcription.get("language", "unknown"),
                 "transcription": cleaned_transcription,  # Keep cleaned transcription
+
+                # Token usage from AI analysis
+                "token_usage": original_analysis.get("token_usage"),
 
                 # Processing metadata
                 "processing_steps": processing_results.get("processing_steps", []),

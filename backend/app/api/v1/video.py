@@ -280,6 +280,8 @@ async def confirm_upload(
             mode=request.mode or "AUTO",
             split_count=request.split_count or 0,
             prompt_tags=request.prompt_tags,
+            preset_name=getattr(request, 'preset_name', None),
+            preset=getattr(request, 'preset', None),
             source_language=request.language or "ko",
         )
         await session.commit()

@@ -1405,7 +1405,9 @@ class VideoSplittingService:
                         "end_time": segment.end_time,
                         "title": segment.title,
                         "summary": segment.summary,
-                        "class_type": segment.class_type
+                        "keywords": segment.keywords or [],
+                        "scripts": segment.scripts,
+                        "class_type": segment.class_type,
                     }
                     segment_list.append(segment_data)
                 
