@@ -1277,6 +1277,7 @@ class BackgroundTaskManager:
                             summary=ai_results.get("summary"),
                             keywords=ai_results.get("keywords"),
                             analysis_result=ai_results,
+                            raw_results=ai_results.get("raw_results"),
                             token_usage=ai_results.get("token_usage"),
                         )
                         await session.commit()

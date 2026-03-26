@@ -96,8 +96,18 @@ class DatabaseManager:
         if not self.engine:
             raise RuntimeError("Database engine not initialized")
 
-        # Import models to ensure they are registered with Base.metadata
-        from app.models import Segment, Video  # noqa: F401
+        # Import all models to ensure they are registered with Base.metadata
+        from app.models import (  # noqa: F401
+            Analysis,
+            Organization,
+            Segment,
+            User,
+            Video,
+            VideoTranslation,
+            SegmentTranslation,
+            Workspace,
+            WorkspaceMember,
+        )
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

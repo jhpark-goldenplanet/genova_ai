@@ -13,6 +13,7 @@ Genova AI Backend의 전체 API 엔드포인트 목록과 동영상 처리 플�
 5. [YouTube Authentication API](#-youtube-authentication-api)
 6. [동영상 처리 플로우](#-동영상-처리-플로우)
 7. [에러 코드](#-에러-코드)
+8. [Analysis API (신규)](#-analysis-api-신규)
 
 ---
 
@@ -226,6 +227,307 @@ x-api-key: dev-test-key-123
 - `pipeline_health`: 파이프라인 헬스 상태
 - `active_processing_count`: 처리 중인 동영상 수
 - `active_video_ids`: 처리 중인 동영상 ID 목록
+
+---
+
+## 🔬 Analysis API (신규)
+
+> 하나의 동영상에 대해 **최대 5개의 독립적인 분석**을 생성·관리할 수 있습니다.
+> 각 분석은 서로 다른 옵션(A/B), 모드(AUTO/CUSTOM), 프리셋을 가질 수 있습니다.
+
+### 1. 분석 생성
+
+**Endpoint**: `POST /v1/videos/{video_id}/analyses`
+**인증**: 필요
+**용도**: 기존 동영상에 새로운 분석 생성 및 AI 파이프라인 시작
+
+**Path 파라미터**:
+- `video_id`: 동영상 UUID
+
+**요청 Body**:
+```json
+{
+  "title": "분석 제목 (선택, 미입력 시 'Analysis N' 자동생성)",
+  "option": "B",
+  "mode": "AUTO",
+  "split_count": 0,
+  "prompt_tags": ["태그1", "태그2"],
+  "preset_name": "my_preset",
+  "preset": {
+    "summaryDensity": "detailed",
+    "analysisFocus": "educational",
+    "scriptStyle": "formal",
+    "tone": "professional"
+  },
+  "language": "ko"
+}
+```
+
+| 필드 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `title` | string? | Auto | 분석 제목 |
+| `option` | `"A"` \| `"B"` | `"B"` | A=경량 STT+텍스트, B=프리미엄 멀티모달 |
+| `mode` | `"AUTO"` \| `"CUSTOM"` | `"AUTO"` | AUTO=AI 자동분할, CUSTOM=사용자 지정 |
+| `split_count` | int (0~10) | `0` | 0=자동, 3~10=지정 개수 |
+| `prompt_tags` | string[]? | null | CUSTOM 모드용 프롬프트 태그 |
+| `preset_name` | string? | null | 프리셋 이름 (재사용 식별용) |
+| `preset` | object? | null | 프리셋 상세 설정 |
+| `language` | `"ko"` \| `"en"` \| `"ja"` \| `"zh"` | `"ko"` | 소스 언어 |
+
+**응답** (201):
+```json
+{
+  "video_id": "671a0ccc-...",
+  "analysis_id": "cbcd0313-...",
+  "analysis_no": 2,
+  "status": "PENDING",
+  "message": "Analysis 2 created and pipeline started"
+}
+```
+
+**제한사항**:
+- 동영상당 최대 5개 분석
+- 동영상이 업로드(gcs_path 존재) 상태여야 함
+
+---
+
+### 2. 분석 목록 조회
+
+**Endpoint**: `GET /v1/videos/{video_id}/analyses`
+**인증**: 불필요
+**용도**: 특정 동영상의 모든 분석 목록 조회
+
+**응답**:
+```json
+{
+  "video_id": "671a0ccc-...",
+  "analyses": [
+    {
+      "analysis_id": "cbcd0313-...",
+      "analysis_no": 1,
+      "title": "Analysis 1",
+      "option": "B",
+      "mode": "AUTO",
+      "split_count": 0,
+      "source_language": "ko",
+      "status": "COMPLETE",
+      "processing_progress": 100,
+      "thumbnail_url": "https://storage.googleapis.com/...",
+      "token_usage": {
+        "prompt_tokens": 58506,
+        "output_tokens": 1748,
+        "total_tokens": 61775
+      },
+      "created_at": "2026-03-26T00:10:57",
+      "updated_at": "2026-03-26T00:11:52"
+    }
+  ],
+  "total_count": 1
+}
+```
+
+---
+
+### 3. 분석 상세 조회
+
+**Endpoint**: `GET /v1/analyses/{analysis_id}`
+**인증**: 불필요
+**용도**: 분석 결과 상세 조회 (세그먼트 포함)
+
+**응답**:
+```json
+{
+  "analysis_id": "cbcd0313-...",
+  "analysis_no": 1,
+  "video_id": "671a0ccc-...",
+  "title": "Analysis 1",
+  "option": "B",
+  "mode": "AUTO",
+  "split_count": 0,
+  "source_language": "ko",
+  "status": "COMPLETE",
+  "processing_progress": 100,
+  "summary": "이 영상은...",
+  "keywords": ["키워드1", "키워드2"],
+  "segments": [
+    {
+      "id": "uuid",
+      "video_id": "uuid",
+      "segment_no": 1,
+      "start_time": "00:00:00",
+      "end_time": "00:02:32",
+      "title": "구간 제목",
+      "summary": "구간 요약",
+      "keywords": ["키워드"],
+      "scripts": "자막 텍스트",
+      "class_type": "introduction",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "token_usage": { "prompt_tokens": 58506, "output_tokens": 1748, "total_tokens": 61775 },
+  "gcs_view_link": "https://storage.googleapis.com/... (24시간 유효)",
+  "thumbnail_url": "https://storage.googleapis.com/... (24시간 유효)",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+---
+
+### 4. 분석 상태 조회
+
+**Endpoint**: `GET /v1/analyses/{analysis_id}/status`
+**인증**: 불필요
+**용도**: 분석 처리 진행 상태 확인 (폴링용)
+
+**응답**:
+```json
+{
+  "analysis_id": "cbcd0313-...",
+  "video_id": "671a0ccc-...",
+  "status": "IN_PROGRESS",
+  "processing_progress": 70
+}
+```
+
+| status | 설명 |
+|--------|------|
+| `PENDING` | 분석 생성됨, 처리 대기 |
+| `IN_PROGRESS` | 처리 중 (progress 0~99) |
+| `COMPLETE` | 분석 완료 |
+| `FAILED` | 분석 실패 |
+
+---
+
+### 5. 분석 삭제
+
+**Endpoint**: `DELETE /v1/analyses/{analysis_id}`
+**인증**: 필요
+**용도**: 분석 삭제 및 관련 GCS 파일 정리
+
+**응답**:
+```json
+{
+  "message": "Analysis deleted",
+  "analysis_id": "cbcd0313-..."
+}
+```
+
+---
+
+### 6. 토큰 사용량 조회
+
+#### 6-1. 단일 분석 사용량
+**Endpoint**: `GET /v1/analyses/{analysis_id}/usage`
+**인증**: 불필요
+
+**응답**:
+```json
+{
+  "analysis_id": "cbcd0313-...",
+  "analysis_no": 1,
+  "video_id": "671a0ccc-...",
+  "title": "Analysis 1",
+  "option": "B",
+  "status": "COMPLETE",
+  "prompt_tokens": 58506,
+  "output_tokens": 1748,
+  "total_tokens": 61775,
+  "created_at": "2026-03-26T00:10:57"
+}
+```
+
+#### 6-2. 동영상별 사용량 합계
+**Endpoint**: `GET /v1/videos/{video_id}/usage`
+**인증**: 불필요
+**용도**: 동영상의 모든 분석 토큰 합산
+
+#### 6-3. 전체 사용량 요약
+**Endpoint**: `GET /v1/usage/summary?start_date=2026-03-01&end_date=2026-03-31`
+**인증**: 불필요
+**용도**: 기간별 전체 토큰 사용량 (옵션별, 동영상별 집계)
+
+---
+
+### 7. 프롬프트 프리셋 목록
+
+**Endpoint**: `GET /v1/presets/list`
+**인증**: 필요
+**용도**: 분석 이력에서 추출한 고유 프리셋 목록
+
+**응답**:
+```json
+{
+  "presets": [
+    {
+      "preset_name": "educational_detailed",
+      "tags": ["교육", "상세분석"],
+      "use_count": 3,
+      "last_used_at": "2026-03-26T00:10:57"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 참고: confirmUpload 변경사항
+
+`POST /v1/video/confirmUpload` 호출 시 아래 파라미터가 추가되었습니다:
+
+| 신규 파라미터 | 타입 | 기본값 | 설명 |
+|---------------|------|--------|------|
+| `option` | `"A"` \| `"B"` | `"B"` | 분석 방식 |
+| `mode` | `"AUTO"` \| `"CUSTOM"` | `"AUTO"` | 분할 모드 |
+| `split_count` | int (0~10) | `0` | 분할 개수 |
+| `prompt_tags` | string[]? | null | 커스텀 프롬프트 태그 |
+| `preset_name` | string? | null | 프리셋 이름 |
+| `preset` | object? | null | 프리셋 설정 |
+
+> confirmUpload 호출 시 Analysis #1이 자동 생성됩니다.
+> 이후 추가 분석은 `POST /v1/videos/{video_id}/analyses`로 생성합니다.
+
+---
+
+### 참고: 비디오 목록 조회 (신규)
+
+**Endpoint**: `GET /v1/video/list`
+**인증**: 필요
+**용도**: 전체 동영상 목록 조회 (페이지네이션)
+
+**쿼리 파라미터**:
+- `limit`: 최대 개수 (기본값 50, 최대 100)
+- `offset`: 페이지네이션 오프셋 (기본값 0)
+- `status`: 상태 필터 (`PENDING` | `IN_PROGRESS` | `COMPLETE` | `FAILED`)
+
+**응답**:
+```json
+{
+  "videos": [
+    {
+      "id": "uuid",
+      "title": "제목",
+      "description": null,
+      "source_type": "FILE_UPLOAD",
+      "status": "COMPLETE",
+      "processing_progress": 100,
+      "duration_seconds": 653,
+      "file_size_bytes": 169612362,
+      "original_filename": "video.mp4",
+      "source_language": "ko",
+      "thumbnail_url": "https://...",
+      "segments_count": 5,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 7,
+  "limit": 50,
+  "offset": 0
+}
+```
 
 ---
 
@@ -492,7 +794,31 @@ yt-dlp --username oauth2 --password "" <youtube_url>
 3. [클라이언트] 위 A 플로우의 5-6단계와 동일
 ```
 
-### C. 분할 다운로드 플로우
+### C. 재분석 플로우 (신규)
+
+```
+1. [클라이언트] 기존 동영상의 video_id 확보
+   → GET /v1/video/list 또는 기존 업로드 결과에서
+
+2. [클라이언트] POST /v1/videos/{video_id}/analyses
+   → 새로운 분석 옵션 지정 (option, mode, preset 등)
+   → analysis_id, analysis_no 받기
+
+3. [백엔드 자동 처리]
+   ├─ GCS에서 원본 파일 다운로드
+   ├─ AI 분석 (새 옵션 적용)
+   ├─ 구간 분할 (analysis_id와 연결)
+   ├─ 썸네일 및 세그먼트 파일 생성
+   └─ 분석 상태 → COMPLETE
+
+4. [클라이언트] GET /v1/analyses/{analysis_id}/status
+   → 진행률 확인 (폴링)
+
+5. [클라이언트] GET /v1/analyses/{analysis_id}
+   → 완료 후 상세 결과 조회
+```
+
+### D. 분할 다운로드 플로우
 
 ```
 1. [클라이언트] GET /v1/video/{video_id}/segments
@@ -637,5 +963,5 @@ yt-dlp --username oauth2 --password "" <youtube_url>
 
 ---
 
-**최종 업데이트**: 2025-01-28
+**최종 업데이트**: 2026-03-26
 **API 버전**: v1
